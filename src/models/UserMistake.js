@@ -17,6 +17,10 @@ const UserMistake = sequelize.define('UserMistake', {
     section: {
         type: DataTypes.STRING,
         allowNull: false
+    },
+    chosenOptionIndex: {
+        type: DataTypes.INTEGER,
+        allowNull: true
     }
 }, {
     indexes: [

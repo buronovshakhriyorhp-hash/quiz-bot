@@ -69,6 +69,10 @@ const User = sequelize.define('User', {
     isRetakeMode: {
         type: DataTypes.BOOLEAN,
         defaultValue: false
+    },
+    isReviewMode: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false
     }
 });
 
