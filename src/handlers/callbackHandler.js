@@ -122,6 +122,26 @@ module.exports = async (bot, callbackQuery) => {
             return;
         }
 
+        if (data === 'main_menu') {
+            const opts = {
+                chat_id: chatId,
+                message_id: msg.message_id,
+                parse_mode: 'HTML',
+                reply_markup: {
+                    inline_keyboard: [
+                        [
+                            { text: 'HTML', callback_data: 'topic_html' },
+                            { text: 'CSS', callback_data: 'topic_css' },
+                            { text: 'JavaScript', callback_data: 'topic_javascript' }
+                        ]
+                    ]
+                }
+            };
+            await bot.editMessageText(`Assalomu alaykum, ${user.firstName}! IT Quiz botiga xush kelibsiz.\nIltimos, bilimingizni sinash uchun fanlardan birini tanlang:`, opts);
+            await bot.answerCallbackQuery(callbackQuery.id);
+            return;
+        }
+
         // Handle topic selection
         if (data.startsWith('topic_')) {
             const topic = data.split('_')[1];
@@ -162,7 +182,7 @@ module.exports = async (bot, callbackQuery) => {
                 keyboard.push(row);
             }
 
-            keyboard.push([{ text: '🔙 Ortga (Top)', callback_data: 'check_subscription' }]); // Back to Main Menu
+            keyboard.push([{ text: '🔙 Ortga (Top)', callback_data: 'main_menu' }]); // Back to Main Menu
 
             await bot.editMessageText(`<b>${topic.toUpperCase()}</b> bo'limini tanlang:`, {
                 chat_id: chatId,
