@@ -484,6 +484,15 @@ module.exports = async (bot, callbackQuery) => {
                 await bot.answerCallbackQuery(callbackQuery.id, { text: `✅ ${successMsg}`, show_alert: false });
             } else {
                 user.incorrectAnswers = (user.incorrectAnswers || 0) + 1;
+
+                // Track Mistake
+                let mistakes = user.mistakes || [];
+                if (!Array.isArray(mistakes)) mistakes = [];
+                if (!mistakes.includes(questionData.id)) {
+                    mistakes.push(questionData.id);
+                    user.mistakes = mistakes;
+                }
+
                 const correctOption = questionData.options[questionData.correctOptionIndex];
                 feedbackText = `❌ <b>Noto'g'ri!</b>\nTo'g'ri javob: <b>${correctOption}</b>`;
                 await bot.answerCallbackQuery(callbackQuery.id, { text: "❌ Noto'g'ri!", show_alert: false });

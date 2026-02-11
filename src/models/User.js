@@ -66,6 +66,10 @@ const User = sequelize.define('User', {
         type: DataTypes.JSON, // Array of question IDs [1, 5, 12]
         defaultValue: []
     },
+    mistakes: {
+        type: DataTypes.JSON, // Array of question IDs that were wrong [5, 12]
+        defaultValue: []
+    },
     isRetakeMode: {
         type: DataTypes.BOOLEAN,
         defaultValue: false

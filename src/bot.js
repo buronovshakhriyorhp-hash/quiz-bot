@@ -273,4 +273,23 @@ bot.on('callback_query', async (query) => {
     await callbackHandler(bot, query);
 });
 
+// Interactive Review Handler
+const { handleReview } = require('./handlers/reviewHandler');
+bot.on('callback_query', async (query) => {
+    const data = query.data;
+    if (data === 'start_review' || data.startsWith('rev_')) {
+        await handleReview(bot, query);
+    }
+});
+
+// Global Error Handling (Stability)
+process.on('uncaughtException', (error) => {
+    console.error('🔥 CRITICAL: Uncaught Exception:', error);
+    // Optional: Restart logic or clean shutdown
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('⚠️ Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 console.log('Bot is running professionally (Webhook)...');
