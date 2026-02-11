@@ -10,7 +10,7 @@ const { scheduleDailyChallenge } = require('./services/dailyChallengeService');
 const { scheduleGroupCompetition } = require('./services/groupCompetitionService');
 const express = require('express');
 const app = express();
-const port = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3000;
 
 // Rate Limiting
 const rateLimit = require('express-rate-limit');
