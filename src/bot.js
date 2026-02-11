@@ -14,8 +14,104 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
+const Season = require('./models/Season');
+
 app.get('/', (req, res) => {
-    res.send('Bot is running (Webhook Mode)!');
+    res.send('Bot is running (Webhook Mode)! <br> <a href="/dashboard?key=YOUR_SECRET_KEY">Go to Dashboard</a>');
+});
+
+// Admin Dashboard Route
+app.get('/dashboard', async (req, res) => {
+    const key = req.query.key;
+    // Simple mock auth. In real app use env var.
+    if (key !== 'admin123') { // Replace with config.ADMIN_SECRET later
+        return res.status(403).send('Unauthorized');
+    }
+
+    // 1. Live Stats
+    const groups = ['N8', 'N9', 'N10'];
+    const liveStats = {};
+    for (const group of groups) {
+        const totalXP = await User.sum('cycleScore', { where: { groupId: group } }) || 0;
+        liveStats[group] = totalXP;
+    }
+
+    // 2. History
+    const history = await Season.findAll({ order: [['createdAt', 'DESC']], limit: 10 });
+
+    // 3. HTML Template
+    const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Bot Admin Dashboard</title>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <style>
+            body { font-family: sans-serif; padding: 20px; background: #f4f4f9; }
+            .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+            h1 { color: #333; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background-color: #f2f2f2; }
+            .chart-container { position: relative; height: 300px; width: 100%; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>📊 Group Competition Dashboard</h1>
+            
+            <h3>⚡ Live Standings (Current Season)</h3>
+            <div class="chart-container">
+                <canvas id="liveChart"></canvas>
+            </div>
+
+            <h3>📜 History (Past Seasons)</h3>
+            <table>
+                <tr>
+                    <th>Date</th>
+                    <th>Winner</th>
+                    <th>Scores</th>
+                    <th>MVPs</th>
+                </tr>
+                ${history.map(h => {
+        const r = h.results; // JSON
+        const scores = Object.keys(r).map(g => `${g}: ${r[g].xp}`).join(', ');
+        const mvps = Object.keys(r).map(g => `${g}: ${r[g].mvp ? r[g].mvp.name : '-'}`).join(', ');
+        return `<tr>
+                        <td>${new Date(h.createdAt).toLocaleDateString()}</td>
+                        <td><b>${h.winnerGroup}</b></td>
+                        <td>${scores}</td>
+                        <td>${mvps}</td>
+                    </tr>`;
+    }).join('')}
+            </table>
+        </div>
+
+        <script>
+            const ctx = document.getElementById('liveChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ${JSON.stringify(groups)},
+                    datasets: [{
+                        label: 'Current XP (Cycle Score)',
+                        data: ${JSON.stringify(groups.map(g => liveStats[g]))},
+                        backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        </script>
+    </body>
+    </html>
+    `;
+
+    res.send(html);
 });
 
 // Self-ping to keep the bot alive
