@@ -47,7 +47,7 @@ module.exports = async (bot, msg) => {
                 keyboard: [
                     ['📊 Statistika', '📢 Xabar yuborish'],
                     ['🏆 Top Reyting', '➕ Savol qo\'shish'],
-                    ['🔙 Chiqish']
+                    ['⏰ Vaqtni sozlash', '🔙 Chiqish']
                 ],
                 resize_keyboard: true,
                 one_time_keyboard: true
@@ -141,6 +141,26 @@ module.exports = async (bot, msg) => {
             await bot.sendMessage(chatId, "✅ Savol bazaga qo'shildi!");
         } catch (e) {
             await bot.sendMessage(chatId, "Xatolik: Format noto'g'ri. Qaytadan urinib ko'ring.");
+        }
+    }
+    else if (text === '⏰ Vaqtni sozlash') {
+        await bot.sendMessage(chatId, "Kunlik musobaqa vaqtini o'zgartirish uchun:\n\n/set_daily_time HH:mm\nMasalan: /set_daily_time 14:30");
+    }
+    else if (text.startsWith('/set_daily_time ')) {
+        const time = text.split(' ')[1];
+        // Validate HH:mm regex
+        if (!/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time)) {
+            await bot.sendMessage(chatId, "❌ Noto'g'ri format! HH:mm (masalan 14:30) ko'rinishida yozing.");
+            return;
+        }
+
+        const { rescheduleDailyChallenge } = require('../services/dailyChallengeService');
+        try {
+            await rescheduleDailyChallenge(bot, time);
+            await bot.sendMessage(chatId, `✅ Kunlik musobaqa vaqti <b>${time}</b> ga o'zgartirildi!`, { parse_mode: 'HTML' });
+        } catch (e) {
+            console.error(e);
+            await bot.sendMessage(chatId, "❌ Xatolik yuz berdi.");
         }
     }
     else if (text === '🔙 Chiqish') {

@@ -2,12 +2,37 @@ const cron = require('node-cron');
 const sequelize = require('../database/db');
 const Question = require('../models/Question');
 const User = require('../models/User');
+const Settings = require('../models/Settings');
 const { Op } = require('sequelize');
 
-async function scheduleDailyChallenge(bot) {
-    // Schedule for 12:00 every day
-    cron.schedule('0 12 * * *', async () => {
-        console.log('Running Daily Challenge...');
+let currentTask = null;
+
+async function scheduleDailyChallenge(bot, time = null) {
+    // If time is not provided, fetch from DB or use default
+    if (!time) {
+        try {
+            await Settings.sync(); // Ensure table exists
+            const setting = await Settings.findOne({ where: { key: 'daily_time' } });
+            time = setting ? setting.value : '12:00';
+        } catch (e) {
+            console.error('Error fetching settings:', e);
+            time = '12:00';
+        }
+    }
+
+    // Stop existing task if any
+    if (currentTask) {
+        currentTask.stop();
+        console.log('Stopped previous Daily Challenge task.');
+    }
+
+    // Parse time HH:mm -> cron format "mm HH * * *"
+    const [hour, minute] = time.split(':');
+    const cronExpression = `${minute} ${hour} * * *`;
+
+    // Schedule
+    currentTask = cron.schedule(cronExpression, async () => {
+        console.log(`Running Daily Challenge at ${time}...`);
 
         try {
             // 1. Find a HARD question (or fallback to medium)
@@ -15,6 +40,8 @@ async function scheduleDailyChallenge(bot) {
                 where: { difficulty: 'hard' },
                 order: sequelize.random() // Random selection
             });
+
+            let selectedQuestion = hardQuestion;
 
             if (!hardQuestion) {
                 // Fallback if no hard questions exist yet
@@ -28,10 +55,7 @@ async function scheduleDailyChallenge(bot) {
                     console.log('No questions available at all.');
                     return;
                 }
-                // use medium but warn
-                var selectedQuestion = mediumQuestion;
-            } else {
-                var selectedQuestion = hardQuestion;
+                selectedQuestion = mediumQuestion;
             }
 
             // 2. Formatting
@@ -39,9 +63,13 @@ async function scheduleDailyChallenge(bot) {
                 return [{ text: opt, callback_data: `dc_${selectedQuestion.id}_${i}` }];
             });
 
+            // Calculate deadline (1 hour later)
+            const deadlineHour = (parseInt(hour) + 1) % 24;
+            const deadlineTime = `${deadlineHour.toString().padStart(2, '0')}:${minute}`;
+
             const message = `🔥 <b>KUNLIK MUSOBAQA!</b> 🔥\n\n` +
                 `Bugungi eng qiyin savolga javob bering va <b>2x XP</b> yutib oling!\n` +
-                `⏳ Vaqt: <b>13:00 gacha</b> ulgurishingiz kerak.\n\n` +
+                `⏳ Vaqt: <b>${deadlineTime} gacha</b> ulgurishingiz kerak.\n\n` +
                 `❓ Savol:\n<b>${selectedQuestion.questionText}</b>`;
 
             // 3. Broadcast to ALL users
@@ -69,7 +97,12 @@ async function scheduleDailyChallenge(bot) {
         }
     });
 
-    console.log('Daily Challenge scheduled for 12:00 everyday.');
+    console.log(`Daily Challenge scheduled for ${time} everyday.`);
 }
 
-module.exports = { scheduleDailyChallenge };
+async function rescheduleDailyChallenge(bot, newTime) {
+    await Settings.upsert({ key: 'daily_time', value: newTime });
+    await scheduleDailyChallenge(bot, newTime);
+}
+
+module.exports = { scheduleDailyChallenge, rescheduleDailyChallenge };
