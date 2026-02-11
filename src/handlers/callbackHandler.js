@@ -27,7 +27,7 @@ async function getCachedSections(topic) {
     return data;
 }
 
-async function askQuestion(bot, chatId, user) {
+async function askQuestion(bot, chatId, user, isFirstQuestion = false, messageId = null) {
     if (!user.currentSection) {
         return bot.sendMessage(chatId, "Xatolik: Bo'lim tanlanmagan.");
     }
@@ -51,9 +51,23 @@ async function askQuestion(bot, chatId, user) {
         user.totalScore += earnedPoints;
         await user.save();
 
-        const resultMsg = `🎉 <b>Tabriklaymiz! Test yakunlandi.</b>\n\n📚 Fan: <b>${user.currentTopic.toUpperCase()}</b>\n📂 Bo'lim: <b>${user.currentSection}</b>\n\n✅ Natija: <b>${user.tempScore}</b> / ${totalQuestions} ta to'g'ri\n🏆 Umumiy ballingiz: <b>${user.totalScore}</b>\n\n🔄 Qayta ishlash uchun /start ni bosing.`;
+        const resultMsg = `🎉 <b>Tabriklaymiz! Test yakunlandi.</b>\n\n📚 Fan: <b>${user.currentTopic.toUpperCase()}</b>\n📂 Bo'lim: <b>${user.currentSection}</b>\n\n✅ Natija: <b>${user.tempScore}</b> / ${Math.min(10, totalQuestions)} ta to'g'ri\n🏆 Umumiy ballingiz: <b>${user.totalScore}</b>\n\n🔄 Qayta ishlash uchun /start ni bosing.`;
 
-        await bot.sendMessage(chatId, resultMsg, { parse_mode: 'HTML' });
+        // Either edit or send new if finishing
+        if (messageId) {
+            try {
+                await bot.editMessageText(resultMsg, {
+                    chat_id: chatId,
+                    message_id: messageId,
+                    parse_mode: 'HTML'
+                });
+            } catch (e) {
+                // if edit fails (e.g. message too old), send new
+                await bot.sendMessage(chatId, resultMsg, { parse_mode: 'HTML' });
+            }
+        } else {
+            await bot.sendMessage(chatId, resultMsg, { parse_mode: 'HTML' });
+        }
 
         // Reset session
         user.currentTopic = null;
@@ -84,10 +98,14 @@ async function askQuestion(bot, chatId, user) {
         return [{ text: option, callback_data: `ans_${index}` }];
     });
 
+    // Add "Back" button if needed, but usually not in quiz flow? 
+    // Maybe "Stop Quiz" button? For now, keep simple.
+
     const opts = {
         reply_markup: {
             inline_keyboard: inlineKeyboard
-        }
+        },
+        parse_mode: 'HTML'
     };
 
     const escapeHTML = (str) => {
@@ -99,8 +117,21 @@ async function askQuestion(bot, chatId, user) {
     };
 
     const safeQuestionText = escapeHTML(questionData.questionText);
+    const progressText = `📊 <b>Savol: ${user.currentQuestionIndex + 1}/${Math.min(10, totalQuestions)}</b>`;
+    const fullText = `${progressText}\n\n❓ ${safeQuestionText}`;
 
-    await bot.sendMessage(chatId, `❓ <b>${user.currentQuestionIndex + 1}-savol:</b>\n${safeQuestionText}`, { ...opts, parse_mode: 'HTML' });
+    if (isFirstQuestion) {
+        await bot.sendMessage(chatId, fullText, opts);
+    } else if (messageId) {
+        await bot.editMessageText(fullText, {
+            chat_id: chatId,
+            message_id: messageId,
+            ...opts
+        });
+    } else {
+        // Fallback
+        await bot.sendMessage(chatId, fullText, opts);
+    }
 }
 
 module.exports = async (bot, callbackQuery) => {
@@ -262,7 +293,7 @@ module.exports = async (bot, callbackQuery) => {
             user.tempScore = 0;
             await user.save();
 
-            await askQuestion(bot, chatId, user);
+            await askQuestion(bot, chatId, user, true);
             await bot.answerCallbackQuery(callbackQuery.id);
             return;
         }
@@ -287,21 +318,75 @@ module.exports = async (bot, callbackQuery) => {
             }
 
             const isCorrect = answerIndex === questionData.correctOptionIndex;
+            let feedbackText = "";
+
             if (isCorrect) {
-                user.tempScore += 1; // 1 point per correct answer
+                user.tempScore += 1;
+                feedbackText = "✅ <b>To'g'ri!</b> Tabriklaymiz!";
                 await bot.answerCallbackQuery(callbackQuery.id, { text: "✅ To'g'ri!", show_alert: false });
             } else {
+                const correctOption = questionData.options[questionData.correctOptionIndex];
+                feedbackText = `❌ <b>Noto'g'ri!</b>\nTo'g'ri javob: <b>${correctOption}</b>`;
                 await bot.answerCallbackQuery(callbackQuery.id, { text: "❌ Noto'g'ri!", show_alert: false });
             }
 
             await user.save();
 
+            // Modify keyboard to show result and freeze
+            const newKeyboard = questionData.options.map((option, index) => {
+                let text = option;
+                if (index === answerIndex) {
+                    text = isCorrect ? `✅ ${option}` : `❌ ${option}`;
+                } else if (index === questionData.correctOptionIndex && !isCorrect) {
+                    // Optionally show correct answer too?
+                    text = `✅ ${option}`;
+                }
+
+                return [{ text: text, callback_data: 'noop' }]; // Disable button
+            });
+
+            // Add Next Button
+            newKeyboard.push([{ text: "➡️ Keyingi savol", callback_data: 'next_question' }]);
+
+            const escapeHTML = (str) => {
+                return str.replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;")
+                    .replace(/'/g, "&#039;");
+            };
+
+            const safeQuestionText = escapeHTML(questionData.questionText);
+
+            // Total questions count needed for progress bar rerender
+            const totalQuestions = await Question.count({
+                where: {
+                    topic: user.currentTopic,
+                    section: user.currentSection
+                }
+            });
+
+            const progressText = `📊 <b>Savol: ${user.currentQuestionIndex + 1}/${Math.min(10, totalQuestions)}</b>`;
+            const fullText = `${progressText}\n\n❓ ${safeQuestionText}\n\n${feedbackText}`;
+
+            await bot.editMessageText(fullText, {
+                chat_id: chatId,
+                message_id: msg.message_id,
+                parse_mode: 'HTML',
+                reply_markup: { inline_keyboard: newKeyboard }
+            });
+        }
+
+        // Handle Next Question
+        if (data === 'next_question') {
             // Move to next question
             user.currentQuestionIndex += 1;
             await user.save();
 
-            // Ask next
-            await askQuestion(bot, chatId, user);
+            // Ask next (edit message)
+            await askQuestion(bot, chatId, user, false, msg.message_id);
+            // Acknowledge callback to stop spinner
+            await bot.answerCallbackQuery(callbackQuery.id);
         }
 
     } catch (e) {
