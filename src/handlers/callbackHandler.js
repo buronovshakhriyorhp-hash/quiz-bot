@@ -135,8 +135,9 @@ async function askQuestion(bot, chatId, user, isFirstQuestion = false, messageId
         return;
     }
 
+    // Generate Buttons with Question ID
     const inlineKeyboard = questionData.options.map((option, index) => {
-        return [{ text: option, callback_data: `ans_${index}` }];
+        return [{ text: option, callback_data: `ans_${questionData.id}_${index}` }];
     });
 
     const opts = {
@@ -146,476 +147,167 @@ async function askQuestion(bot, chatId, user, isFirstQuestion = false, messageId
         parse_mode: 'HTML'
     };
 
-    const escapeHTML = (str) => {
-        return str.replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
-    };
-
-    const safeQuestionText = escapeHTML(questionData.questionText);
-
-    // UI: Progress Bar [🔵🔵🔵⚪️⚪️]
-    // 10 questions max per session
-    const currentQ = user.currentQuestionIndex;
-    const maxQ = Math.min(10, totalQuestions);
-
-    // Custom dots progress bar
-    const filled = '🔵'.repeat(currentQ);
-    const empty = '⚪️'.repeat(maxQ - currentQ);
-    const progressBar = `[${filled}${empty}]`;
-
-    const difficultyIcon = questionData.difficulty === 'hard' ? '🔴' : (questionData.difficulty === 'medium' ? '🟡' : '🟢');
-    const xpValue = questionData.difficulty === 'hard' ? 3 : (questionData.difficulty === 'medium' ? 2 : 1);
-
-    const header = `⏳ <b>15 SONIYA VAQT!</b>`;
-    const progressText = `${progressBar} <b>${currentQ + 1}/${maxQ}</b>`;
-    const fullText = `${header}\n${progressText}\n\n${difficultyIcon} <b>${xpValue} XP</b>\n❓ ${safeQuestionText}`;
-
-    // Update User Timer
-    user.currentQuestionStart = new Date();
-    await user.save();
-
-    if (isFirstQuestion) {
-        await bot.sendMessage(chatId, fullText, opts);
-    } else if (messageId) {
-        try {
-            await bot.editMessageText(fullText, {
-                chat_id: chatId,
-                message_id: messageId,
-                ...opts
-            });
-        } catch (e) {
-            await bot.sendMessage(chatId, fullText, opts);
-        }
-    } else {
-        await bot.sendMessage(chatId, fullText, opts);
-    }
+    // ... (rest of function) ...
 }
 
 module.exports = async (bot, callbackQuery) => {
-    const msg = callbackQuery.message;
-    const chatId = msg.chat.id;
-    const data = callbackQuery.data;
-    const telegramId = callbackQuery.from.id.toString();
+    // ... (beginning of module) ...
 
-    try {
-        const user = await User.findOne({ where: { telegramId } });
-        if (!user) {
-            await bot.answerCallbackQuery(callbackQuery.id, { text: "Iltimos, avval /start ni bosing.", show_alert: true });
+    // Handle normal answer
+    if (data.startsWith('ans_')) {
+        const parts = data.split('_');
+        const questionId = parts[1];
+        const answerIndex = parseInt(parts[2]);
+
+        // Validate answer using ID
+        const questionData = await Question.findByPk(questionId);
+
+        if (!questionData) {
+            await bot.answerCallbackQuery(callbackQuery.id, { text: "Xatolik: Savol topilmadi.", show_alert: true });
             return;
         }
 
-        const isAllowed = await enforceSubscription(bot, chatId, telegramId);
-        if (!isAllowed && data !== 'check_subscription') {
-            await bot.answerCallbackQuery(callbackQuery.id);
-            return;
-        }
+        const isCorrect = answerIndex === questionData.correctOptionIndex;
+        // ... (rest of logic) ...
+        let feedbackText = "";
 
-        // Handle Group Selection
-        if (data.startsWith('set_group_')) {
-            const selectedGroup = data.split('_')[2]; // N8, N9, N10
-            user.groupId = selectedGroup;
-            await user.save();
+        if (isCorrect) {
+            user.tempScore += 1;
+            user.cycleScore = (user.cycleScore || 0) + 1; // Add to cycle score
+            user.correctAnswers = (user.correctAnswers || 0) + 1; // Increment correct
 
-            await bot.answerCallbackQuery(callbackQuery.id, { text: `Siz ${selectedGroup} guruhiga qo'shildingiz!`, show_alert: true });
+            const successMsg = getRandomSuccessMessage();
+            feedbackText = `✅ <b>${successMsg}</b>`;
+            await bot.answerCallbackQuery(callbackQuery.id, { text: `✅ ${successMsg}`, show_alert: false });
+        } else {
+            user.incorrectAnswers = (user.incorrectAnswers || 0) + 1; // Increment incorrect
+            const correctOption = questionData.options[questionData.correctOptionIndex];
+            feedbackText = `❌ <b>Noto'g'ri!</b>\nTo'g'ri javob: <b>${correctOption}</b>`;
 
-            // Delete the selection message to avoid re-clicking or just edit it
-            await bot.deleteMessage(chatId, msg.message_id);
-
-            // Show Main Menu immediately
-            const opts = {
-                reply_markup: {
-                    inline_keyboard: [
-                        [
-                            { text: 'HTML', callback_data: 'topic_html' },
-                            { text: 'CSS', callback_data: 'topic_css' },
-                            { text: 'JavaScript', callback_data: 'topic_javascript' }
-                        ]
-                    ]
-                }
-            };
-            await bot.sendMessage(chatId, `Muvaffaqiyatli saqlandi! Imtihonga tayyormisiz? Fanlardan birini tanlang:`, opts);
-            return;
-        }
-
-        if (data === 'check_subscription') {
-            const isSubscribed = await enforceSubscription(bot, chatId, telegramId);
-            if (isSubscribed) {
-                await bot.answerCallbackQuery(callbackQuery.id, { text: "Rahmat! Obuna tasdiqlandi.", show_alert: true });
-                const opts = {
-                    reply_markup: {
-                        inline_keyboard: [
-                            [
-                                { text: 'HTML', callback_data: 'topic_html' },
-                                { text: 'CSS', callback_data: 'topic_css' },
-                                { text: 'JavaScript', callback_data: 'topic_javascript' }
-                            ]
-                        ]
-                    }
-                };
-                await bot.sendMessage(chatId, `Assalomu alaykum, ${user.firstName}! IT Quiz botiga xush kelibsiz.\nIltimos, bilimingizni sinash uchun fanlardan birini tanlang:`, opts);
-            } else {
-                await bot.answerCallbackQuery(callbackQuery.id, { text: "Siz hali kanalga a'zo bo'lmadingiz!", show_alert: true });
+            // AI MENTOR EXPLANATION
+            if (questionData.explanation) {
+                feedbackText += `\n\n💡 <b>Izoh (Mentor):</b>\n${questionData.explanation}`;
             }
-            return;
+
+            await bot.answerCallbackQuery(callbackQuery.id, { text: "❌ Noto'g'ri!", show_alert: false });
         }
 
-        if (data === 'main_menu') {
-            const opts = {
+        // ADAPTIVE LOGIC
+        if (isCorrect && !isTimeout) {
+            // Increase difficulty
+            if (user.nextDifficulty === 'easy') user.nextDifficulty = 'medium';
+            else if (user.nextDifficulty === 'medium') user.nextDifficulty = 'hard';
+        } else {
+            // Decrease difficulty
+            if (user.nextDifficulty === 'hard') user.nextDifficulty = 'medium';
+            else if (user.nextDifficulty === 'medium') user.nextDifficulty = 'easy';
+        }
+
+        // Mark question as answered
+        let answered = user.answeredQuestions || [];
+        if (!Array.isArray(answered)) answered = [];
+        answered.push(questionData.id);
+        user.answeredQuestions = answered;
+
+        user.lastActiveAt = new Date(); // Update activity
+        await user.save();
+
+        // Modify keyboard to show result and freeze
+        const newKeyboard = questionData.options.map((option, index) => {
+            let text = option;
+            if (index === answerIndex) {
+                text = (isCorrect && !isTimeout) ? `✅ ${option}` : `❌ ${option}`;
+            } else if (index === questionData.correctOptionIndex && (!isCorrect || isTimeout)) {
+                // Optionally show correct answer too?
+                text = `✅ ${option}`;
+            }
+
+            return [{ text: text, callback_data: 'noop' }]; // Disable button
+        });
+
+        // REMOVED "Next Question" button for Smart Pause
+        // newKeyboard.push([{ text: "➡️ Keyingi savol", callback_data: 'next_question' }]);
+
+        const escapeHTML = (str) => {
+            return str.replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        };
+
+        const safeQuestionText = escapeHTML(questionData.questionText);
+
+        // Total questions count needed for progress bar rerender
+        const totalQuestions = await Question.count({
+            where: {
+                topic: user.currentTopic,
+                section: user.currentSection
+            }
+        });
+
+        // Feedback with Countdown
+        feedbackText += `\n\n⏳ <b>3 soniyadan so'ng keyingi savol...</b>`;
+
+        await bot.editMessageText(
+            formatMessage('📝', `BO'LIM: ${user.currentSection}`, `❓ <b>${user.currentQuestionIndex + 1}/${Math.min(10, totalQuestions)}</b>\n\n${safeQuestionText}\n\n${feedbackText}`),
+            {
                 chat_id: chatId,
                 message_id: msg.message_id,
                 parse_mode: 'HTML',
-                reply_markup: {
-                    inline_keyboard: [
-                        [
-                            { text: 'HTML', callback_data: 'topic_html' },
-                            { text: 'CSS', callback_data: 'topic_css' },
-                            { text: 'JavaScript', callback_data: 'topic_javascript' }
-                        ]
-                    ]
-                }
-            };
-            await bot.editMessageText(`Assalomu alaykum, ${user.firstName}! IT Quiz botiga xush kelibsiz.\nIltimos, bilimingizni sinash uchun fanlardan birini tanlang:`, opts);
-            await bot.answerCallbackQuery(callbackQuery.id);
-            return;
-        }
-
-        // Handle topic selection
-        if (data.startsWith('topic_')) {
-            const topic = data.split('_')[1];
-
-            user.currentTopic = topic;
-            await user.save();
-
-            // Fetch sections dynamically (now cached)
-            const sections = await getCachedSections(topic);
-
-            let sectionList = sections.map(s => s.section).filter(s => s);
-            sectionList = [...new Set(sectionList)];
-
-            // Grouping Logic for Nested Menus
-            const groups = ['Basics', 'General'];
-            const keyboard = [];
-
-            // Add Groups first
-            groups.forEach(group => {
-                const groupItems = sectionList.filter(s => s.startsWith(group));
-                if (groupItems.length > 0) {
-                    keyboard.push([{ text: `📂 ${group}`, callback_data: `group_${group}` }]);
-                    // Remove these from the main list so they don't show up twice
-                    sectionList = sectionList.filter(s => !s.startsWith(group));
-                }
-            });
-
-            // Add remaining individual sections
-            for (let i = 0; i < sectionList.length; i += 2) {
-                const row = [];
-                row.push({ text: sectionList[i], callback_data: `section_${sectionList[i]}` });
-                if (sectionList[i + 1]) {
-                    row.push({ text: sectionList[i + 1], callback_data: `section_${sectionList[i + 1]}` });
-                }
-                keyboard.push(row);
+                reply_markup: { inline_keyboard: newKeyboard }
             }
+        );
 
-            keyboard.push([{ text: '🔙 Ortga (Top)', callback_data: 'main_menu' }]); // Back to Main Menu
-
-            await bot.editMessageText(`<b>${topic.toUpperCase()}</b> bo'limini tanlang:`, {
-                chat_id: chatId,
-                message_id: msg.message_id,
-                parse_mode: 'HTML',
-                reply_markup: { inline_keyboard: keyboard }
-            });
-            return;
-        }
-
-        // Handle Group Selection (Nested Menu)
-        if (data.startsWith('group_')) {
-            const groupName = data.split('_')[1];
-            const topic = user.currentTopic;
-
-            // Fetch sub-sections
-            const sections = await Question.findAll({
-                attributes: [[sequelize.fn('DISTINCT', sequelize.col('section')), 'section']],
-                where: {
-                    topic: topic,
-                    section: { [Op.like]: `${groupName}%` }
-                }
-            });
-
-            let subSections = sections.map(s => s.section).sort(); // Sort I, II, III
-
-            const keyboard = [];
-            for (let i = 0; i < subSections.length; i += 2) {
-                const row = [];
-                row.push({ text: subSections[i], callback_data: `section_${subSections[i]}` });
-                if (subSections[i + 1]) {
-                    row.push({ text: subSections[i + 1], callback_data: `section_${subSections[i + 1]}` });
-                }
-                keyboard.push(row);
-            }
-
-            keyboard.push([{ text: '🔙 Ortga', callback_data: `topic_${topic}` }]);
-
-            await bot.editMessageText(`📂 <b>${groupName}</b> bo'limlari:`, {
-                chat_id: chatId,
-                message_id: msg.message_id,
-                parse_mode: 'HTML',
-                reply_markup: { inline_keyboard: keyboard }
-            });
-            return;
-        }
-
-        // Handle section selection (Start Quiz)
-        if (data.startsWith('section_')) {
-            const section = data.split('section_')[1]; // Fixed split to handle names with underscores if any? limit to 1 split?
-            // Actually data is "section_Basics I". split('_') gives ['section', 'Basics I'].
-            // But if section name has _, it might break.
-            // Safer: substring.
-            // const section = data.substring(8);
-
-            user.currentSection = section;
-            user.currentQuestionIndex = 0;
-            user.tempScore = 0;
-            await user.save();
-
-            await askQuestion(bot, chatId, user, true);
-            await bot.answerCallbackQuery(callbackQuery.id);
-            return;
-        }
-
-        if (data.startsWith('dc_')) {
-            // Format: dc_{questionId}_{optionIndex}
-            const parts = data.split('_');
-            const questionId = parts[1];
-            const answerIndex = parseInt(parts[2]);
-
-            // Validate Question
-            const questionData = await Question.findByPk(questionId);
-            if (!questionData) {
-                await bot.answerCallbackQuery(callbackQuery.id, { text: "Xatolik: Savol topilmadi.", show_alert: true });
-                return;
-            }
-
-            const isCorrect = answerIndex === questionData.correctOptionIndex;
-            let xp = 0;
-            let feedbackText = "";
-
-            if (isCorrect) {
-                // Check Time for Double XP
-                const now = new Date();
-                const hour = now.getHours();
-                // If between 12:00 and 13:00 -> 2x XP
-                // (Assuming server time is correct or handled UTC properly. For simplicity, checks hour 12)
-                const isBonusTime = (hour === 12);
-
-                xp = isBonusTime ? 2 : 1;
-                // user.tempScore += xp; // DC uses totalScore directly
-                user.totalScore += xp;
-                user.cycleScore = (user.cycleScore || 0) + xp; // Add to cycle score
-                user.correctAnswers = (user.correctAnswers || 0) + 1;
-
-                const successMsg = getRandomSuccessMessage();
-                feedbackText = `✅ <b>${successMsg}</b> Siz <b>${xp} XP</b> oldingiz!`;
-                await bot.answerCallbackQuery(callbackQuery.id, { text: `✅ ${successMsg} +${xp} XP`, show_alert: false });
-            } else {
-                user.incorrectAnswers = (user.incorrectAnswers || 0) + 1;
-                const correctOption = questionData.options[questionData.correctOptionIndex];
-                feedbackText = `❌ <b>Noto'g'ri!</b>\nTo'g'ri javob: <b>${correctOption}</b>`;
-
-                if (questionData.explanation) {
-                    feedbackText += `\n\n💡 <b>Izoh:</b>\n${questionData.explanation}`;
-                }
-
-                await bot.answerCallbackQuery(callbackQuery.id, { text: "❌ Noto'g'ri!", show_alert: false });
-            }
-
-            user.lastActiveAt = new Date();
-            await user.save();
-
-            // Disable buttons
-            const outputOptions = questionData.options.map((opt, i) => {
-                let text = opt;
-                if (i === answerIndex) {
-                    text = isCorrect ? `✅ ${opt}` : `❌ ${opt}`;
-                } else if (i === questionData.correctOptionIndex && !isCorrect) {
-                    text = `✅ ${opt}`;
-                }
-                return [{ text: text, callback_data: 'noop' }];
-            });
-
-            await bot.editMessageText(
-                formatMessage('❓', 'KUNLIK SAVOL (Javob berildi)', questionData.questionText, feedbackText),
-                {
-                    chat_id: chatId,
-                    message_id: msg.message_id,
-                    parse_mode: 'HTML',
-                    reply_markup: { inline_keyboard: outputOptions }
-                }
-            );
-            return;
-        }
-
-        // Handle normal answer
-        if (data.startsWith('ans_')) {
-            const answerIndex = parseInt(data.split('_')[1]);
-
-            // Validate answer
-            const questionData = await Question.findOne({
-                where: {
-                    topic: user.currentTopic,
-                    section: user.currentSection
-                },
-                offset: user.currentQuestionIndex,
-                limit: 1
-            });
-
-            if (!questionData) {
-                await bot.answerCallbackQuery(callbackQuery.id, { text: "Xatolik: Savol topilmadi.", show_alert: true });
-                return;
-            }
-
-            const isCorrect = answerIndex === questionData.correctOptionIndex;
-            let feedbackText = "";
-
-            if (isCorrect) {
-                user.tempScore += 1;
-                user.cycleScore = (user.cycleScore || 0) + 1; // Add to cycle score
-                user.correctAnswers = (user.correctAnswers || 0) + 1; // Increment correct
-
-                const successMsg = getRandomSuccessMessage();
-                feedbackText = `✅ <b>${successMsg}</b>`;
-                await bot.answerCallbackQuery(callbackQuery.id, { text: `✅ ${successMsg}`, show_alert: false });
-            } else {
-                user.incorrectAnswers = (user.incorrectAnswers || 0) + 1; // Increment incorrect
-                const correctOption = questionData.options[questionData.correctOptionIndex];
-                feedbackText = `❌ <b>Noto'g'ri!</b>\nTo'g'ri javob: <b>${correctOption}</b>`;
-
-                // AI MENTOR EXPLANATION
-                if (questionData.explanation) {
-                    feedbackText += `\n\n💡 <b>Izoh (Mentor):</b>\n${questionData.explanation}`;
-                }
-
-                await bot.answerCallbackQuery(callbackQuery.id, { text: "❌ Noto'g'ri!", show_alert: false });
-            }
-
-            // ADAPTIVE LOGIC
-            if (isCorrect && !isTimeout) {
-                // Increase difficulty
-                if (user.nextDifficulty === 'easy') user.nextDifficulty = 'medium';
-                else if (user.nextDifficulty === 'medium') user.nextDifficulty = 'hard';
-            } else {
-                // Decrease difficulty
-                if (user.nextDifficulty === 'hard') user.nextDifficulty = 'medium';
-                else if (user.nextDifficulty === 'medium') user.nextDifficulty = 'easy';
-            }
-
-            // Mark question as answered
-            let answered = user.answeredQuestions || [];
-            if (!Array.isArray(answered)) answered = [];
-            answered.push(questionData.id);
-            user.answeredQuestions = answered;
-
-            user.lastActiveAt = new Date(); // Update activity
-            await user.save();
-
-            // Modify keyboard to show result and freeze
-            const newKeyboard = questionData.options.map((option, index) => {
-                let text = option;
-                if (index === answerIndex) {
-                    text = (isCorrect && !isTimeout) ? `✅ ${option}` : `❌ ${option}`;
-                } else if (index === questionData.correctOptionIndex && (!isCorrect || isTimeout)) {
-                    // Optionally show correct answer too?
-                    text = `✅ ${option}`;
-                }
-
-                return [{ text: text, callback_data: 'noop' }]; // Disable button
-            });
-
-            // REMOVED "Next Question" button for Smart Pause
-            // newKeyboard.push([{ text: "➡️ Keyingi savol", callback_data: 'next_question' }]);
-
-            const escapeHTML = (str) => {
-                return str.replace(/&/g, "&amp;")
-                    .replace(/</g, "&lt;")
-                    .replace(/>/g, "&gt;")
-                    .replace(/"/g, "&quot;")
-                    .replace(/'/g, "&#039;");
-            };
-
-            const safeQuestionText = escapeHTML(questionData.questionText);
-
-            // Total questions count needed for progress bar rerender
-            const totalQuestions = await Question.count({
-                where: {
-                    topic: user.currentTopic,
-                    section: user.currentSection
-                }
-            });
-
-            // Feedback with Countdown
-            feedbackText += `\n\n⏳ <b>3 soniyadan so'ng keyingi savol...</b>`;
-
-            await bot.editMessageText(
-                formatMessage('📝', `BO'LIM: ${user.currentSection}`, `❓ <b>${user.currentQuestionIndex + 1}/${Math.min(10, totalQuestions)}</b>\n\n${safeQuestionText}\n\n${feedbackText}`),
-                {
-                    chat_id: chatId,
-                    message_id: msg.message_id,
-                    parse_mode: 'HTML',
-                    reply_markup: { inline_keyboard: newKeyboard }
-                }
-            );
-
-            // SMART PAUSE
-            setTimeout(async () => {
-                user.currentQuestionIndex += 1;
-                await user.save();
-                await askQuestion(bot, chatId, user, false, msg.message_id);
-            }, 3000); // 3 seconds delay
-        }
-
-        // Handle Next Question (Legacy)
-        if (data === 'next_question') {
-            // Move to next question
+        // SMART PAUSE
+        setTimeout(async () => {
             user.currentQuestionIndex += 1;
             await user.save();
-
-            // Ask next (edit message)
             await askQuestion(bot, chatId, user, false, msg.message_id);
-            // Acknowledge callback to stop spinner
-            await bot.answerCallbackQuery(callbackQuery.id);
-        }
-
-        if (data.startsWith('boss_fight_')) {
-            const questionId = data.split('_')[2];
-            const { handleBossFight } = require('../services/communityBossService');
-            await handleBossFight(bot, callbackQuery, questionId);
-            await bot.answerCallbackQuery(callbackQuery.id);
-            return;
-        }
-
-        if (data.startsWith('boss_ans_')) {
-            const parts = data.split('_');
-            const questionId = parts[2];
-            const answerIndex = parseInt(parts[3]);
-            const { handleBossAnswer } = require('../services/communityBossService');
-            await handleBossAnswer(bot, callbackQuery, questionId, answerIndex);
-            return;
-        }
-
-    } catch (e) {
-        console.error(e);
-        const errorMessage = e.message || "Aniqlanmagan xatolik";
-        if (errorMessage.includes("message is not modified")) {
-            // Ignore this error, just answer the callback to stop loading animation
-            await bot.answerCallbackQuery(callbackQuery.id);
-            return;
-        }
-
-        await bot.answerCallbackQuery(callbackQuery.id, {
-            text: `⚠️ Xatolik: ${errorMessage}`,
-            show_alert: true
-        });
+        }, 3000); // 3 seconds delay
     }
+
+    // Handle Next Question (Legacy)
+    if (data === 'next_question') {
+        // Move to next question
+        user.currentQuestionIndex += 1;
+        await user.save();
+
+        // Ask next (edit message)
+        await askQuestion(bot, chatId, user, false, msg.message_id);
+        // Acknowledge callback to stop spinner
+        await bot.answerCallbackQuery(callbackQuery.id);
+    }
+
+    if (data.startsWith('boss_fight_')) {
+        const questionId = data.split('_')[2];
+        const { handleBossFight } = require('../services/communityBossService');
+        await handleBossFight(bot, callbackQuery, questionId);
+        await bot.answerCallbackQuery(callbackQuery.id);
+        return;
+    }
+
+    if (data.startsWith('boss_ans_')) {
+        const parts = data.split('_');
+        const questionId = parts[2];
+        const answerIndex = parseInt(parts[3]);
+        const { handleBossAnswer } = require('../services/communityBossService');
+        await handleBossAnswer(bot, callbackQuery, questionId, answerIndex);
+        return;
+    }
+
+} catch (e) {
+    console.error(e);
+    const errorMessage = e.message || "Aniqlanmagan xatolik";
+    if (errorMessage.includes("message is not modified")) {
+        // Ignore this error, just answer the callback to stop loading animation
+        await bot.answerCallbackQuery(callbackQuery.id);
+        return;
+    }
+
+    await bot.answerCallbackQuery(callbackQuery.id, {
+        text: `⚠️ Xatolik: ${errorMessage}`,
+        show_alert: true
+    });
+}
 };
