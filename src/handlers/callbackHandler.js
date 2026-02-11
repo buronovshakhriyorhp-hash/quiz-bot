@@ -29,56 +29,86 @@ async function getCachedSections(topic) {
 }
 
 // Timer Management
-const userTimers = new Map();
+const userTimers = new Map();     // Handles the 15s Timeout action
+const userIntervals = new Map();  // Handles the visual countdown updates
+const userAutoAdvance = new Map();// Handles the auto-jump after feedback
 
-async function handleQuestionTimeout(bot, chatId, telegramId, messageId) {
-    try {
-        const user = await User.findOne({ where: { telegramId } });
-        if (!user) return;
-
-        // Verify if user is still on the same question (to avoid race conditions)
-        // Actually, just incrementing is risky if they answered in the last millisecond.
-        // But with single-threaded JS, collision is rare. 
-        // Better: Check if timer is still in map? No, timer calls this then deletes itself?
-        // Let's assume if this fires, user hasn't answered.
-
-        // Mark as incorrect/timeout
-        // user.incorrectAnswers = (user.incorrectAnswers || 0) + 1; // Optional: count timeout as wrong
-        user.currentQuestionIndex += 1;
-        await user.save();
-
-        // Edit message to show Time's Up
-        try {
-            await bot.editMessageText(`⏳ <b>VAQT TUGADI!</b>\n\nKeyingi savolga o'tilmoqda...`, {
-                chat_id: chatId,
-                message_id: messageId,
-                parse_mode: 'HTML'
-            });
-        } catch (e) {
-            console.error("Timeout edit error:", e.message);
+async function getCachedSections(topic) {
+    if (sectionCache.has(topic)) {
+        const cached = sectionCache.get(topic);
+        if (Date.now() - cached.timestamp < SECTION_CACHE_TTL) {
+            return cached.data;
         }
-
-        // Clean timer
-        if (userTimers.has(telegramId)) userTimers.delete(telegramId);
-
-        // Proceed to next question after small delay
-        setTimeout(() => {
-            askQuestion(bot, chatId, user, false, messageId);
-        }, 1000);
-
-    } catch (e) {
-        console.error("Timeout Handler Error:", e);
     }
+
+    const sections = await Question.findAll({
+        attributes: [[sequelize.fn('DISTINCT', sequelize.col('section')), 'section']],
+        where: { topic: topic }
+    });
+
+    const data = sections;
+    sectionCache.set(topic, { data, timestamp: Date.now() });
+    return data;
+}
+
+function clearUserTimers(telegramId) {
+    if (userTimers.has(telegramId)) {
+        clearTimeout(userTimers.get(telegramId));
+        userTimers.delete(telegramId);
+    }
+    if (userIntervals.has(telegramId)) {
+        clearInterval(userIntervals.get(telegramId));
+        userIntervals.delete(telegramId);
+    }
+    if (userAutoAdvance.has(telegramId)) {
+        clearTimeout(userAutoAdvance.get(telegramId));
+        userAutoAdvance.delete(telegramId);
+    }
+}
+try {
+    const user = await User.findOne({ where: { telegramId } });
+    if (!user) return;
+
+    // Verify if user is still on the same question (to avoid race conditions)
+    // Actually, just incrementing is risky if they answered in the last millisecond.
+    // But with single-threaded JS, collision is rare. 
+    // Better: Check if timer is still in map? No, timer calls this then deletes itself?
+    // Let's assume if this fires, user hasn't answered.
+
+    // Mark as incorrect/timeout
+    // user.incorrectAnswers = (user.incorrectAnswers || 0) + 1; // Optional: count timeout as wrong
+    user.currentQuestionIndex += 1;
+    await user.save();
+
+    // Edit message to show Time's Up
+    try {
+        await bot.editMessageText(`⏳ <b>VAQT TUGADI!</b>\n\nKeyingi savolga o'tilmoqda...`, {
+            chat_id: chatId,
+            message_id: messageId,
+            parse_mode: 'HTML'
+        });
+    } catch (e) {
+        console.error("Timeout edit error:", e.message);
+    }
+
+    // Clean timer
+    clearUserTimers(telegramId);
+
+    // Proceed to next question after small delay
+    setTimeout(() => {
+        askQuestion(bot, chatId, user, false, messageId);
+    }, 1000);
+
+} catch (e) {
+    console.error("Timeout Handler Error:", e);
+}
 }
 
 async function askQuestion(bot, chatId, user, isFirstQuestion = false, messageId = null) {
     const telegramId = user.telegramId;
 
     // Clear any existing timer for this user
-    if (userTimers.has(telegramId)) {
-        clearTimeout(userTimers.get(telegramId));
-        userTimers.delete(telegramId);
-    }
+    clearUserTimers(telegramId);
 
     if (!user.currentSection) {
         return bot.sendMessage(chatId, "Xatolik: Bo'lim tanlanmagan.");
@@ -189,11 +219,8 @@ async function askQuestion(bot, chatId, user, isFirstQuestion = false, messageId
     const safeQuestionText = escapeHTML(questionData.questionText);
 
     // UI: Progress Bar [🔵🔵🔵⚪️⚪️]
-    // 10 questions max per session
     const currentQ = user.currentQuestionIndex;
     const maxQ = Math.min(10, totalQuestions);
-
-    // Custom dots progress bar
     const filled = '🔵'.repeat(currentQ);
     const empty = '⚪️'.repeat(maxQ - currentQ);
     const progressBar = `[${filled}${empty}]`;
@@ -201,15 +228,19 @@ async function askQuestion(bot, chatId, user, isFirstQuestion = false, messageId
     const difficultyIcon = questionData.difficulty === 'hard' ? '🔴' : (questionData.difficulty === 'medium' ? '🟡' : '🟢');
     const xpValue = questionData.difficulty === 'hard' ? 3 : (questionData.difficulty === 'medium' ? 2 : 1);
 
-    const header = `⏳ <b>15 SONIYA VAQT!</b>`;
+    // Initial Render
+    let timeLeft = 15;
+    const getHeader = (t) => `⏳ <b>${t}s qoldi...</b>`; // Dynamic Header
     const progressText = `${progressBar} <b>${currentQ + 1}/${maxQ}</b>`;
-    const fullText = `${header}\n${progressText}\n\n${difficultyIcon} <b>${xpValue} XP</b>\n❓ ${safeQuestionText}`;
+    const formatFullText = (t) => `${getHeader(t)}\n${progressText}\n\n${difficultyIcon} <b>${xpValue} XP</b>\n❓ ${safeQuestionText}`;
 
     // Update User Timer
     user.currentQuestionStart = new Date();
     await user.save();
 
     let sentMsg;
+    const fullText = formatFullText(timeLeft);
+
     if (isFirstQuestion) {
         sentMsg = await bot.sendMessage(chatId, fullText, opts);
     } else if (messageId) {
@@ -219,7 +250,6 @@ async function askQuestion(bot, chatId, user, isFirstQuestion = false, messageId
                 message_id: messageId,
                 ...opts
             });
-            // Handle boolean return from editMessageText
             if (typeof sentMsg === 'boolean' || !sentMsg) {
                 sentMsg = { message_id: messageId };
             }
@@ -230,11 +260,31 @@ async function askQuestion(bot, chatId, user, isFirstQuestion = false, messageId
         sentMsg = await bot.sendMessage(chatId, fullText, opts);
     }
 
-    // Start 15s Timer
     if (sentMsg && sentMsg.message_id) {
+        const msgId = sentMsg.message_id;
+
+        // 1. VISUAL COUNTDOWN (Update every 3s to avoid rate limits)
+        // 15s -> 12s -> 9s -> 6s -> 3s -> 0s
+        const intervalId = setInterval(async () => {
+            timeLeft -= 3;
+            if (timeLeft > 0) {
+                try {
+                    await bot.editMessageText(formatFullText(timeLeft), {
+                        chat_id: chatId,
+                        message_id: msgId,
+                        ...opts
+                    });
+                } catch (ignore) { }
+            } else {
+                clearInterval(intervalId);
+            }
+        }, 3000);
+        userIntervals.set(telegramId, intervalId);
+
+        // 2. HARD TIMEOUT (15s)
         const timerId = setTimeout(() => {
-            handleQuestionTimeout(bot, chatId, telegramId, sentMsg.message_id);
-        }, 15000); // 15 seconds
+            handleQuestionTimeout(bot, chatId, telegramId, msgId);
+        }, 15000);
         userTimers.set(telegramId, timerId);
     }
 }
