@@ -17,14 +17,14 @@ app.use(express.json());
 const Season = require('./models/Season');
 
 app.get('/', (req, res) => {
-    res.send('Bot is running (Webhook Mode)! <br> <a href="/dashboard?key=YOUR_SECRET_KEY">Go to Dashboard</a>');
+    res.send('Bot is running (Webhook Mode)! <br> <a href="/dashboard?key=@Gumsmass645">Go to Dashboard</a>');
 });
 
 // Admin Dashboard Route
 app.get('/dashboard', async (req, res) => {
     const key = req.query.key;
     // Simple mock auth. In real app use env var.
-    if (key !== 'admin123') { // Replace with config.ADMIN_SECRET later
+    if (key !== '@Gumsmass645') { // Updated secret key
         return res.status(403).send('Unauthorized');
     }
 
