@@ -153,6 +153,33 @@ module.exports = async (bot, callbackQuery) => {
             return;
         }
 
+        // Handle Group Selection
+        if (data.startsWith('set_group_')) {
+            const selectedGroup = data.split('_')[2]; // N8, N9, N10
+            user.groupId = selectedGroup;
+            await user.save();
+
+            await bot.answerCallbackQuery(callbackQuery.id, { text: `Siz ${selectedGroup} guruhiga qo'shildingiz!`, show_alert: true });
+
+            // Delete the selection message to avoid re-clicking or just edit it
+            await bot.deleteMessage(chatId, msg.message_id);
+
+            // Show Main Menu immediately
+            const opts = {
+                reply_markup: {
+                    inline_keyboard: [
+                        [
+                            { text: 'HTML', callback_data: 'topic_html' },
+                            { text: 'CSS', callback_data: 'topic_css' },
+                            { text: 'JavaScript', callback_data: 'topic_javascript' }
+                        ]
+                    ]
+                }
+            };
+            await bot.sendMessage(chatId, `Muvaffaqiyatli saqlandi! Imtihonga tayyormisiz? Fanlardan birini tanlang:`, opts);
+            return;
+        }
+
         if (data === 'check_subscription') {
             const isSubscribed = await enforceSubscription(bot, chatId, telegramId);
             if (isSubscribed) {
@@ -324,8 +351,9 @@ module.exports = async (bot, callbackQuery) => {
                 const isBonusTime = (hour === 12);
 
                 xp = isBonusTime ? 2 : 1;
-                user.tempScore += xp; // Maybe use totalScore directly for DC? DC usually adds to Total Score.
-                user.totalScore += xp; // Add to permanent score
+                // user.tempScore += xp; // DC uses totalScore directly
+                user.totalScore += xp;
+                user.cycleScore = (user.cycleScore || 0) + xp; // Add to cycle score
                 user.correctAnswers = (user.correctAnswers || 0) + 1;
 
                 feedbackText = `✅ <b>To'g'ri!</b> Siz <b>${xp} XP</b> oldingiz!`;
@@ -384,6 +412,7 @@ module.exports = async (bot, callbackQuery) => {
 
             if (isCorrect) {
                 user.tempScore += 1;
+                user.cycleScore = (user.cycleScore || 0) + 1; // Add to cycle score
                 user.correctAnswers = (user.correctAnswers || 0) + 1; // Increment correct
                 feedbackText = "✅ <b>To'g'ri!</b> Tabriklaymiz!";
                 await bot.answerCallbackQuery(callbackQuery.id, { text: "✅ To'g'ri!", show_alert: false });

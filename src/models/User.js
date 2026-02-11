@@ -26,6 +26,10 @@ const User = sequelize.define('User', {
         type: DataTypes.INTEGER,
         defaultValue: 0
     },
+    cycleScore: {
+        type: DataTypes.INTEGER,
+        defaultValue: 0
+    },
     correctAnswers: {
         type: DataTypes.INTEGER,
         defaultValue: 0

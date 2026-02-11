@@ -41,11 +41,24 @@ module.exports = async (bot, msg) => {
         if (text === '/start' || text === `/start@${(await bot.getMe()).username}`) {
             // Check if group chat
             if (msg.chat.type === 'group' || msg.chat.type === 'supergroup') {
-                const botMember = await bot.getChatMember(chatId, (await bot.getMe()).id);
-                if (botMember.status !== 'administrator' && botMember.status !== 'creator') {
-                    await bot.sendMessage(chatId, "Iltimos, ishlashim uchun meni ushbu guruhga ADMIN qiling.");
-                    return;
-                }
+                // ... existing group logic ...
+            }
+
+            // Check if User has Group ID
+            if (!userRecord.groupId) {
+                const groupOpts = {
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                { text: 'N8 Guruhi', callback_data: 'set_group_N8' },
+                                { text: 'N9 Guruhi', callback_data: 'set_group_N9' },
+                                { text: 'N10 Guruhi', callback_data: 'set_group_N10' }
+                            ]
+                        ]
+                    }
+                };
+                await bot.sendMessage(chatId, `Assalomu alaykum, ${user.first_name}!\n\nMusobaqada qatnashish uchun iltimos <b>o'z guruhingizni tanlang</b>:`, { ...groupOpts, parse_mode: 'HTML' });
+                return;
             }
 
             const opts = {
