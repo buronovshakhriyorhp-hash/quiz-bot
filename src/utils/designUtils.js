@@ -1,65 +1,66 @@
 const { ADMIN_ID } = require('../config/config');
 
-const GROUP_ICONS = {
-    'N8': '💎',
-    'N9': '⚡️',
-    'N10': '🔥'
+const THEMES = {
+    'N8': { icon: '💎', color: 'blue', header: '💎 N8 GURUHI', title: 'StartUp Factory' },
+    'N9': { icon: '⚡️', color: 'yellow', header: '⚡️ N9 GURUHI', title: 'Code Wizards' },
+    'N10': { icon: '🔥', color: 'red', header: '🔥 N10 GURUHI', title: 'Fire Bandits' },
+    'default': { icon: '🚀', color: 'white', header: '🚀 IT QUIZ', title: 'Bilimonlar' }
 };
 
+function getTheme(groupId) {
+    return THEMES[groupId] || THEMES['default'];
+}
+
 /**
- * Formats a message with a consistent design system.
- * @param {string} emoji - The emoji for the header.
- * @param {string} title - The bold title.
- * @param {string} content - The main body content.
- * @param {string} footer - Optional footer text (e.g., call to action).
- * @returns {string} Formatted HTML string.
+ * Generates a Premium Card Layout
+ * @param {string} groupId - User's group ID for branding
+ * @param {string} status - Top status line (e.g., "📊 3/10 | ⏳ 15s")
+ * @param {string} xpBadge - XP indicator (e.g., "🟡 +10 XP")
+ * @param {string} content - Main question content
+ * @param {string} footer - Explanation or bottom text
  */
-function formatMessage(emoji, title, content, footer = '') {
-    let msg = `${emoji} <b>${title}</b>\n\n`;
-    msg += `${content}\n\n`;
-    msg += `-----------------------\n`;
-    if (footer) {
-        msg += `<i>${footer}</i>`;
+function formatCard(groupId, status, xpBadge, content, footer = '') {
+    const theme = getTheme(groupId);
+
+    // Header Construction
+    // Using a cleaner, modern look:
+    // ╭─── 💎 N8 GURUHI ───╮
+    let msg = `╭─── <b>${theme.header}</b> ───╮\n`;
+
+    // Status Row
+    msg += `│ ${status}\n`;
+
+    // XP Row (Optional, maybe combine with status? Let's keep it separate for visibility as requested)
+    if (xpBadge) {
+        msg += `│ ${xpBadge}\n`;
     }
+
+    msg += `╰─────────────────────╯\n\n`; // End of header block
+
+    // Main Content
+    msg += `${content}\n`;
+
+    // Footer / Explanation
+    if (footer) {
+        msg += `\n─────────────────────\n`;
+        msg += `${footer}`;
+    }
+
     return msg;
 }
 
 /**
- * Generates an ASCII progress bar.
- * @param {number} value - Current value.
- * @param {number} max - Maximum value.
- * @param {number} length - Length of the bar (default 10).
- * @returns {string} E.g., "[▓▓▓▓▓░░░░░]"
+ * Generates a Modern Progress Bar
+ * Style: ▰▰▰▱▱▱▱▱
  */
-function getProgressBar(value, max, length = 10) {
+function getModernProgressBar(value, max, length = 10) {
     const percent = Math.min(Math.max(value / max, 0), 1);
     const filledLen = Math.round(length * percent);
     const emptyLen = length - filledLen;
-    // Alternative chars: █ ░ or ▓ ░
-    const filled = '▓'.repeat(filledLen);
-    const empty = '░'.repeat(emptyLen);
-    return `[${filled}${empty}]`;
-}
-
-function getGroupIcon(groupId) {
-    return GROUP_ICONS[groupId] || '🛡';
-}
-
-/**
- * Logs errors to the admin via Telegram message.
- * @param {object} bot - Telegram bot instance.
- * @param {Error} error - The error object.
- * @param {string} context - Where the error happened.
- */
-async function logErrorToAdmin(bot, error, context = '') {
-    try {
-        if (ADMIN_ID) {
-            const errorMsg = `⚠️ <b>XATOLIK!</b>\n\nJoy: ${context}\nXabar: <pre>${error.message}</pre>`;
-            await bot.sendMessage(ADMIN_ID, errorMsg, { parse_mode: 'HTML' });
-        }
-    } catch (e) {
-        console.error('Failed to log error to admin:', e);
-    }
+    // Premium chars
+    const filled = '▰'.repeat(filledLen);
+    const empty = '▱'.repeat(emptyLen);
+    return `${filled}${empty}`;
 }
 
 const SUCCESS_MESSAGES = [
@@ -86,11 +87,23 @@ function escapeHTML(str) {
         .replace(/'/g, "&#039;");
 }
 
+async function logErrorToAdmin(bot, error, context = '') {
+    try {
+        if (ADMIN_ID) {
+            const errorMsg = `⚠️ <b>XATOLIK!</b>\n\nJoy: ${context}\nXabar: <pre>${error.message}</pre>`;
+            await bot.sendMessage(ADMIN_ID, errorMsg, { parse_mode: 'HTML' });
+        }
+    } catch (e) {
+        console.error('Failed to log error to admin:', e);
+    }
+}
+
 module.exports = {
-    formatMessage,
-    getProgressBar,
-    getGroupIcon,
-    logErrorToAdmin,
+    getTheme,
+    formatCard,
+    getModernProgressBar,
     getRandomSuccessMessage,
-    escapeHTML
+    escapeHTML,
+    logErrorToAdmin,
+    formatMessage: formatCard // Alias for backward compatibility if needed, though signatures differ
 };
