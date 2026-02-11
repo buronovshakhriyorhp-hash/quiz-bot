@@ -29,7 +29,7 @@ async function askQuestion(bot, chatId, user) {
         user.totalScore += earnedPoints;
         await user.save();
 
-        const resultMsg = `🏁 <b>Test yakunlandi!</b>\n\nFan: ${user.currentTopic.toUpperCase()}\nBo'lim: ${user.currentSection}\nNatija: ${user.tempScore}\nUmumiy ballingiz: ${user.totalScore}\n\nQayta ishlash uchun /start ni bosing.`;
+        const resultMsg = `🎉 <b>Tabriklaymiz! Test yakunlandi.</b>\n\n📚 Fan: <b>${user.currentTopic.toUpperCase()}</b>\n📂 Bo'lim: <b>${user.currentSection}</b>\n\n✅ Natija: <b>${user.tempScore}</b> / ${totalQuestions} ta to'g'ri\n🏆 Umumiy ballingiz: <b>${user.totalScore}</b>\n\n🔄 Qayta ishlash uchun /start ni bosing.`;
 
         await bot.sendMessage(chatId, resultMsg, { parse_mode: 'HTML' });
 
@@ -267,6 +267,10 @@ module.exports = async (bot, callbackQuery) => {
 
     } catch (e) {
         console.error(e);
-        await bot.answerCallbackQuery(callbackQuery.id, { text: "Xatolik yuz berdi.", show_alert: true });
+        const errorMessage = e.message || "Aniqlanmagan xatolik";
+        await bot.answerCallbackQuery(callbackQuery.id, {
+            text: `⚠️ Xatolik: ${errorMessage}`,
+            show_alert: true
+        });
     }
 };
