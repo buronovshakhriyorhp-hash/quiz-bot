@@ -195,7 +195,14 @@ app.post(`/bot${TOKEN}`, (req, res) => {
     res.sendStatus(200);
 });
 
-app.listen(PORT, async () => {
+app.post(`/bot${TOKEN}`, (req, res) => {
+    bot.processUpdate(req.body);
+    res.sendStatus(200);
+});
+
+// FAULT TOLERANCE: Explicitly binding to 0.0.0.0 for Render
+// The PORT variable is already defined globally at the top
+app.listen(PORT, '0.0.0.0', async () => {
     console.log(`Server is running on port ${PORT}`);
 
     // Set Webhook

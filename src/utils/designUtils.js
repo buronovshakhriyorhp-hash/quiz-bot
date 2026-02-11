@@ -77,10 +77,20 @@ function getRandomSuccessMessage() {
     return SUCCESS_MESSAGES[randomIndex];
 }
 
+function escapeHTML(str) {
+    if (!str) return '';
+    return str.replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 module.exports = {
     formatMessage,
     getProgressBar,
     getGroupIcon,
     logErrorToAdmin,
-    getRandomSuccessMessage
+    getRandomSuccessMessage,
+    escapeHTML
 };
