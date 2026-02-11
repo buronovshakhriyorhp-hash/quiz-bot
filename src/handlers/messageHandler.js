@@ -57,15 +57,25 @@ module.exports = async (bot, msg) => {
                 limit: 10
             });
 
-            let message = "🏆 **Top 10 Foydalanuvchilar:**\n\n";
-            topUsers.forEach((u, index) => {
-                const name = u.firstName || u.username || 'Noma\'lum';
-                message += `${index + 1}. ${name} - ${u.totalScore} ball\n`;
-            });
+            if (topUsers.length === 0) {
+                await bot.sendMessage(chatId, "Hozircha reyting bo'sh.");
+            } else {
+                let message = "🏆 <b>TOP 10 Bilimdonlar:</b>\n\n";
+                topUsers.forEach((u, index) => {
+                    let medal = '';
+                    if (index === 0) medal = '🥇';
+                    else if (index === 1) medal = '🥈';
+                    else if (index === 2) medal = '🥉';
+                    else medal = `${index + 1}.`;
 
-            await bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+                    const name = u.firstName ? u.firstName.replace(/</g, "&lt;") : (u.username || "Foydalanuvchi");
+                    message += `${medal} <b>${name}</b> - ${u.totalScore} ball\n`;
+                });
+
+                await bot.sendMessage(chatId, message, { parse_mode: 'HTML' });
+            }
         } else if (text === '/help') {
-            await bot.sendMessage(chatId, "Yordam:\n/start - Botni qayta ishga tushirish\n/top - Reytingni ko'rish");
+            await bot.sendMessage(chatId, "Yordam:\n/start - Botni qayta ishga tushirish\n/top - 🏆 Reytingni ko'rish\n/help - Yordam");
         }
     } catch (error) {
         console.error('Error in message handler:', error);

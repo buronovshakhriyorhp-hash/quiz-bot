@@ -49,11 +49,24 @@ sequelize.sync({ alter: true })
     .then(() => console.log('Database synced'))
     .catch(err => console.error('Database error:', err));
 
+const isRateLimited = require('./middleware/rateLimiter');
+
 // Handlers
 bot.on('message', async (msg) => {
+    const userId = msg.from.id;
+    if (isRateLimited(userId)) return;
+
     await adminHandler(bot, msg);
     await messageHandler(bot, msg);
 });
-bot.on('callback_query', (query) => callbackHandler(bot, query));
+
+bot.on('callback_query', async (query) => {
+    const userId = query.from.id;
+    if (isRateLimited(userId)) {
+        await bot.answerCallbackQuery(query.id, { text: "⚠️ Iltimos, biroz sekinroq!", show_alert: true });
+        return;
+    }
+    await callbackHandler(bot, query);
+});
 
 console.log('Bot is running professionally (Webhook)...');
