@@ -132,7 +132,8 @@ app.get('/dashboard', async (req, res) => {
                     let html = '<ul>';
                     for (const [group, rate] of Object.entries(data.growthRates)) {
                         const color = rate >= 0 ? 'green' : 'red';
-                        html += `< li > <b>${group}</b>: <span style="color:${color}">${rate > 0 ? '+' : ''}${rate}%</span></li > `;
+                        // Using single quotes + concatenation to avoid nested template literal issues
+                        html += '<li><b>' + group + '</b>: <span style="color:' + color + '">' + (rate > 0 ? '+' : '') + rate + '%</span></li>';
                     }
                     html += '</ul>';
                     growthDiv.innerHTML = html;
