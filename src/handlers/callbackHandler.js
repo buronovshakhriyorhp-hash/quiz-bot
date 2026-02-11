@@ -298,7 +298,69 @@ module.exports = async (bot, callbackQuery) => {
             return;
         }
 
-        // Handle answer
+        if (data.startsWith('dc_')) {
+            // Format: dc_{questionId}_{optionIndex}
+            const parts = data.split('_');
+            const questionId = parts[1];
+            const answerIndex = parseInt(parts[2]);
+
+            // Validate Question
+            const questionData = await Question.findByPk(questionId);
+            if (!questionData) {
+                await bot.answerCallbackQuery(callbackQuery.id, { text: "Xatolik: Savol topilmadi.", show_alert: true });
+                return;
+            }
+
+            const isCorrect = answerIndex === questionData.correctOptionIndex;
+            let xp = 0;
+            let feedbackText = "";
+
+            if (isCorrect) {
+                // Check Time for Double XP
+                const now = new Date();
+                const hour = now.getHours();
+                // If between 12:00 and 13:00 -> 2x XP
+                // (Assuming server time is correct or handled UTC properly. For simplicity, checks hour 12)
+                const isBonusTime = (hour === 12);
+
+                xp = isBonusTime ? 2 : 1;
+                user.tempScore += xp; // Maybe use totalScore directly for DC? DC usually adds to Total Score.
+                user.totalScore += xp; // Add to permanent score
+                user.correctAnswers = (user.correctAnswers || 0) + 1;
+
+                feedbackText = `✅ <b>To'g'ri!</b> Siz <b>${xp} XP</b> oldingiz!`;
+                await bot.answerCallbackQuery(callbackQuery.id, { text: `✅ To'g'ri! +${xp} XP`, show_alert: false });
+            } else {
+                user.incorrectAnswers = (user.incorrectAnswers || 0) + 1;
+                const correctOption = questionData.options[questionData.correctOptionIndex];
+                feedbackText = `❌ <b>Noto'g'ri!</b>\nTo'g'ri javob: <b>${correctOption}</b>`;
+                await bot.answerCallbackQuery(callbackQuery.id, { text: "❌ Noto'g'ri!", show_alert: false });
+            }
+
+            user.lastActiveAt = new Date();
+            await user.save();
+
+            // Disable buttons
+            const outputOptions = questionData.options.map((opt, i) => {
+                let text = opt;
+                if (i === answerIndex) {
+                    text = isCorrect ? `✅ ${opt}` : `❌ ${opt}`;
+                } else if (i === questionData.correctOptionIndex && !isCorrect) {
+                    text = `✅ ${opt}`;
+                }
+                return [{ text: text, callback_data: 'noop' }];
+            });
+
+            await bot.editMessageText(`❓ <b>KUNLIK SAVOL (Javob berildi):</b>\n${questionData.questionText}\n\n${feedbackText}`, {
+                chat_id: chatId,
+                message_id: msg.message_id,
+                parse_mode: 'HTML',
+                reply_markup: { inline_keyboard: outputOptions }
+            });
+            return;
+        }
+
+        // Handle normal answer
         if (data.startsWith('ans_')) {
             const answerIndex = parseInt(data.split('_')[1]);
 

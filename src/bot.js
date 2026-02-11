@@ -6,6 +6,7 @@ const messageHandler = require('./handlers/messageHandler');
 const callbackHandler = require('./handlers/callbackHandler');
 const adminHandler = require('./handlers/adminHandler');
 const User = require('./models/User'); // Ensure model is loaded
+const { scheduleDailyChallenge } = require('./services/dailyChallengeService');
 const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -43,6 +44,9 @@ app.listen(PORT, async () => {
 
 // Initialize Bot (No Polling)
 const bot = new TelegramBot(TOKEN, { polling: false });
+
+// Schedule Daily Challenge
+scheduleDailyChallenge(bot);
 
 // Database Connection
 sequelize.sync({ alter: true })

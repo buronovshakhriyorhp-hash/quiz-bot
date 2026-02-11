@@ -28,6 +28,10 @@ const Question = sequelize.define('Question', {
         type: DataTypes.STRING,
         defaultValue: 'text'
     },
+    difficulty: {
+        type: DataTypes.STRING, // 'easy', 'medium', 'hard'
+        defaultValue: 'medium'
+    },
     mediaFileId: { // Telegram file_id for photo/video
         type: DataTypes.STRING,
         allowNull: true
