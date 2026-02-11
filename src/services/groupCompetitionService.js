@@ -21,7 +21,7 @@ async function scheduleGroupCompetition(bot) {
             for (const group of groups) {
                 const totalXP = await User.sum('cycleScore', { where: { groupId: group } });
 
-                // Find MVP
+                // Find MVP (Null Check added)
                 const mvpUser = await User.findOne({
                     where: { groupId: group },
                     order: [['cycleScore', 'DESC']],
@@ -30,10 +30,10 @@ async function scheduleGroupCompetition(bot) {
 
                 const groupData = {
                     group,
-                    xp: totalXP || 0,
+                    xp: totalXP || 0, // Handle possible null from sum
                     mvp: mvpUser ? {
-                        name: mvpUser.firstName || mvpUser.username || "Noname",
-                        score: mvpUser.cycleScore
+                        name: mvpUser.firstName || mvpUser.username || "Noname", // Handle missing names
+                        score: mvpUser.cycleScore || 0
                     } : null
                 };
 

@@ -105,43 +105,64 @@ app.get('/dashboard', async (req, res) => {
             </table>
         </div>
 
-        <script>
-            const ctx = document.getElementById('liveChart').getContext('2d');
-            new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: ${JSON.stringify(groups)},
-                    datasets: [{
-                        label: 'Current XP (Cycle Score)',
-                        data: ${JSON.stringify(groups.map(g => liveStats[g]))},
-                        backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56']
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    scales: {
-                        y: { beginAtZero: true }
-                    }
-                }
-            });
+    <script>
+        const ctx = document.getElementById('liveChart').getContext('2d');
+        const groups = ${JSON.stringify(groups)};
+        const liveStatsData = ${JSON.stringify(groups.map(g => liveStats[g] || 0))};
 
-            // Fetch Growth Analytics
-            fetch('/api/analytics')
-                .then(res => res.json())
-                .then(data => {
-                    const growthDiv = document.getElementById('growthStats');
-                    let html = '<ul>';
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: groups,
+                datasets: [{
+                    label: 'Current XP (Cycle Score)',
+                    data: liveStatsData,
+                    backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56']
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+
+        // Fetch Growth Analytics with Error Handling
+        fetch('/api/analytics')
+            .then(res => {
+                if (!res.ok) throw new Error('Network response was not ok');
+                return res.text(); // Get text first
+            })
+            .then(text => {
+                try {
+                    return JSON.parse(text); // Try parsing JSON
+                } catch (e) {
+                    console.error('Invalid JSON response:', text);
+                    throw new Error('Server returned invalid JSON (possibly HTML error page)');
+                }
+            })
+            .then(data => {
+                const growthDiv = document.getElementById('growthStats');
+                let html = '<ul>';
+                if (data.growthRates) {
                     for (const [group, rate] of Object.entries(data.growthRates)) {
                         const color = rate >= 0 ? 'green' : 'red';
-                        // Using single quotes + concatenation to avoid nested template literal issues
-                        html += '<li><b>' + group + '</b>: <span style="color:' + color + '">' + (rate > 0 ? '+' : '') + rate + '%</span></li>';
+                        const safeGroup = String(group).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                        html += '<li><b>' + safeGroup + '</b>: <span style="color:' + color + '">' + (rate > 0 ? '+' : '') + rate + '%</span></li>';
                     }
-                    html += '</ul>';
-                    growthDiv.innerHTML = html;
-                });
-        </script>
-    </body>
-    </html>
+                } else {
+                    html += '<li>No growth data available.</li>';
+                }
+                html += '</ul>';
+                growthDiv.innerHTML = html;
+            })
+            .catch(err => {
+                document.getElementById('growthStats').innerHTML = '<span style="color:red">Error loading analytics: ' + err.message + '</span>';
+            });
+    </script>
+</body>
+</html>
     `;
 
     res.send(html);
