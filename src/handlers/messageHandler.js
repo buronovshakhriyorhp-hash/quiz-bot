@@ -12,15 +12,30 @@ module.exports = async (bot, msg) => {
     if (!text) return;
 
     try {
-        // Find or create user
-        const [dbUser, created] = await User.findOrCreate({
-            where: { telegramId: user.id.toString() },
-            defaults: {
+        // Create or Update user (Upsert)
+        // We use upsert to keep firstName and username fresh.
+        // totalScore and joinDate are preserved if record exists (by default upsert updates all unless specified)
+        // But Sequelize upsert updates all fields passed.
+        // To preserve totalScore, we should check if user exists or use a different approach.
+        // Actually, upsert overwrites.
+        // Better approach for "update info but keep score":
+
+        let userRecord = await User.findOne({ where: { telegramId: user.id.toString() } });
+        if (!userRecord) {
+            userRecord = await User.create({
+                telegramId: user.id.toString(),
                 firstName: user.first_name,
                 username: user.username,
-                totalScore: 0
+                // joinDate and totalScore use defaults
+            });
+        } else {
+            // Update info only if changed
+            if (userRecord.firstName !== user.first_name || userRecord.username !== user.username) {
+                userRecord.firstName = user.first_name;
+                userRecord.username = user.username;
+                await userRecord.save();
             }
-        });
+        }
 
         const isAllowed = await enforceSubscription(bot, chatId, user.id);
         if (!isAllowed) return;

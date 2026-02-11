@@ -14,6 +14,10 @@ const User = sequelize.define('User', {
     username: {
         type: DataTypes.STRING
     },
+    joinDate: {
+        type: DataTypes.DATE,
+        defaultValue: DataTypes.NOW
+    },
     totalScore: {
         type: DataTypes.INTEGER,
         defaultValue: 0
