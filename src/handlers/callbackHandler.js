@@ -288,6 +288,12 @@ module.exports = async (bot, callbackQuery) => {
     } catch (e) {
         console.error(e);
         const errorMessage = e.message || "Aniqlanmagan xatolik";
+        if (errorMessage.includes("message is not modified")) {
+            // Ignore this error, just answer the callback to stop loading animation
+            await bot.answerCallbackQuery(callbackQuery.id);
+            return;
+        }
+
         await bot.answerCallbackQuery(callbackQuery.id, {
             text: `⚠️ Xatolik: ${errorMessage}`,
             show_alert: true
