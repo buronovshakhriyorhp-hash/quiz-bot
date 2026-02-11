@@ -32,6 +32,17 @@ const Question = sequelize.define('Question', {
         type: DataTypes.STRING,
         allowNull: true
     }
+}, {
+    indexes: [
+        {
+            unique: false,
+            fields: ['topic']
+        },
+        {
+            unique: false,
+            fields: ['topic', 'section']
+        }
+    ]
 });
 
 module.exports = Question;

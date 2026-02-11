@@ -2,7 +2,7 @@
 const { CHANNEL_USERNAME, ADMIN_ID } = require('../config/config');
 
 const subscriptionCache = new Map();
-const CACHE_TTL = 120 * 1000; // 2 minutes
+const CACHE_TTL = 300 * 1000; // 5 minutes
 
 async function checkSubscription(bot, userId) {
     // Admin bypass

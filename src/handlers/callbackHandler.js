@@ -5,6 +5,28 @@ const sequelize = require('../database/db');
 const { Op } = require('sequelize');
 const { enforceSubscription } = require('../services/subscriptionService');
 
+// Simple in-memory cache for sections
+const sectionCache = new Map();
+const SECTION_CACHE_TTL = 600 * 1000; // 10 minutes
+
+async function getCachedSections(topic) {
+    if (sectionCache.has(topic)) {
+        const cached = sectionCache.get(topic);
+        if (Date.now() - cached.timestamp < SECTION_CACHE_TTL) {
+            return cached.data;
+        }
+    }
+
+    const sections = await Question.findAll({
+        attributes: [[sequelize.fn('DISTINCT', sequelize.col('section')), 'section']],
+        where: { topic: topic }
+    });
+
+    const data = sections;
+    sectionCache.set(topic, { data, timestamp: Date.now() });
+    return data;
+}
+
 async function askQuestion(bot, chatId, user) {
     if (!user.currentSection) {
         return bot.sendMessage(chatId, "Xatolik: Bo'lim tanlanmagan.");
@@ -149,11 +171,8 @@ module.exports = async (bot, callbackQuery) => {
             user.currentTopic = topic;
             await user.save();
 
-            // Fetch sections dynamically
-            const sections = await Question.findAll({
-                attributes: [[sequelize.fn('DISTINCT', sequelize.col('section')), 'section']],
-                where: { topic: topic }
-            });
+            // Fetch sections dynamically (now cached)
+            const sections = await getCachedSections(topic);
 
             let sectionList = sections.map(s => s.section).filter(s => s);
             sectionList = [...new Set(sectionList)];
