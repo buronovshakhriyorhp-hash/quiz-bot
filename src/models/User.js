@@ -65,6 +65,10 @@ const User = sequelize.define('User', {
     answeredQuestions: {
         type: DataTypes.JSON, // Array of question IDs [1, 5, 12]
         defaultValue: []
+    },
+    isRetakeMode: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false
     }
 });
 
