@@ -2,6 +2,7 @@
 const User = require('../models/User');
 const Question = require('../models/Question');
 const sequelize = require('../database/db');
+const { Op } = require('sequelize');
 const { enforceSubscription } = require('../services/subscriptionService');
 
 async function askQuestion(bot, chatId, user) {
@@ -182,7 +183,7 @@ module.exports = async (bot, callbackQuery) => {
                 attributes: [[sequelize.fn('DISTINCT', sequelize.col('section')), 'section']],
                 where: {
                     topic: topic,
-                    section: { [sequelize.Op.like]: `${groupName}%` }
+                    section: { [Op.like]: `${groupName}%` }
                 }
             });
 
