@@ -1,4 +1,5 @@
 
+const { formatMessage, getGroupIcon, logErrorToAdmin } = require('../utils/designUtils');
 const User = require('../models/User');
 const { enforceSubscription } = require('../services/subscriptionService');
 
@@ -50,14 +51,16 @@ module.exports = async (bot, msg) => {
                     reply_markup: {
                         inline_keyboard: [
                             [
-                                { text: 'N8 Guruhi', callback_data: 'set_group_N8' },
-                                { text: 'N9 Guruhi', callback_data: 'set_group_N9' },
-                                { text: 'N10 Guruhi', callback_data: 'set_group_N10' }
+                                { text: '💎 N8', callback_data: 'set_group_N8' },
+                                { text: '⚡️ N9', callback_data: 'set_group_N9' },
+                                { text: '🔥 N10', callback_data: 'set_group_N10' }
                             ]
                         ]
                     }
                 };
-                await bot.sendMessage(chatId, `Assalomu alaykum, ${user.first_name}!\n\nMusobaqada qatnashish uchun iltimos <b>o'z guruhingizni tanlang</b>:`, { ...groupOpts, parse_mode: 'HTML' });
+
+                const msg = formatMessage('👋', `Assalomu alaykum, ${user.first_name}!`, `Musobaqada qatnashish uchun iltimos <b>o'z guruhingizni tanlang</b>:`);
+                await bot.sendMessage(chatId, msg, { ...groupOpts, parse_mode: 'HTML' });
                 return;
             }
 
@@ -79,20 +82,21 @@ module.exports = async (bot, msg) => {
             const total = (u.correctAnswers || 0) + (u.incorrectAnswers || 0);
             const winRate = total > 0 ? Math.round((u.correctAnswers / total) * 100) : 0;
 
-            // Level calculation
             const level = Math.floor(u.totalScore / 50) + 1;
             let levelTitle = "Havaskor";
-            if (level > 5 && level <= 10) levelTitle = "Bilimdon";
-            if (level > 10 && level <= 20) levelTitle = "Mutaxassis";
+            if (level > 5) levelTitle = "Bilimdon";
+            if (level > 10) levelTitle = "Mutaxassis";
             if (level > 20) levelTitle = "Ekspert";
             if (level > 50) levelTitle = "Grandmaster";
 
             const joinDate = u.joinDate ? new Date(u.joinDate).toLocaleDateString('uz-UZ') : 'Noma\'lum';
             const lastActive = u.lastActiveAt ? new Date(u.lastActiveAt).toLocaleString('uz-UZ') : 'Hozirgina';
+            const groupIcon = getGroupIcon(u.groupId);
 
-            const profileMsg = `👤 <b>PROFIL: ${u.firstName}</b>\n\n` +
-                `🔰 <b>Daraja:</b> ${levelTitle} (Level ${level})\n` +
-                `✨ <b>XP (Ball):</b> ${u.totalScore}\n\n` +
+            const content = `🔰 <b>Daraja:</b> ${levelTitle} (Level ${level})\n` +
+                `👥 <b>Guruh:</b> ${groupIcon} ${u.groupId || 'Tanlanmagan'}\n` +
+                `✨ <b>XP (Mavsumiy):</b> ${u.cycleScore || 0}\n` +
+                `🏆 <b>XP (Umumiy):</b> ${u.totalScore}\n\n` +
                 `📊 <b>Statistika:</b>\n` +
                 `✅ To'g'ri: ${u.correctAnswers || 0} ta\n` +
                 `❌ Xato: ${u.incorrectAnswers || 0} ta\n` +
@@ -100,7 +104,8 @@ module.exports = async (bot, msg) => {
                 `📅 A'zo bo'lgan: ${joinDate}\n` +
                 `🕒 Oxirgi faollik: ${lastActive}`;
 
-            await bot.sendMessage(chatId, profileMsg, { parse_mode: 'HTML' });
+            const msg = formatMessage('👤', `PROFIL: ${u.firstName}`, content);
+            await bot.sendMessage(chatId, msg, { parse_mode: 'HTML' });
 
         } else if (text === '/top') {
             const topUsers = await User.findAll({
@@ -111,19 +116,21 @@ module.exports = async (bot, msg) => {
             if (topUsers.length === 0) {
                 await bot.sendMessage(chatId, "Hozircha reyting bo'sh.");
             } else {
-                let message = "🏆 <b>TOP 10 Bilimdonlar:</b>\n\n";
+                let list = "";
                 topUsers.forEach((u, index) => {
                     let medal = '';
                     if (index === 0) medal = '🥇';
                     else if (index === 1) medal = '🥈';
                     else if (index === 2) medal = '🥉';
-                    else medal = `${index + 1}.`;
+                    else medal = `<b>${index + 1}.</b>`;
 
                     const name = u.firstName ? u.firstName.replace(/</g, "&lt;") : (u.username || "Foydalanuvchi");
-                    message += `${medal} <b>${name}</b> - ${u.totalScore} ball\n`;
+                    const icon = getGroupIcon(u.groupId);
+                    list += `${medal} ${icon} <b>${name}</b> — <code>${u.totalScore} XP</code>\n`;
                 });
 
-                await bot.sendMessage(chatId, message, { parse_mode: 'HTML' });
+                const msg = formatMessage('🏆', 'TOP 10 BILIMDONLAR', list);
+                await bot.sendMessage(chatId, msg, { parse_mode: 'HTML' });
             }
         } else if (text === '/help') {
             await bot.sendMessage(chatId, "Yordam:\n/start - Botni qayta ishga tushirish\n/profile - Mening profilim\n/top - 🏆 Reytingni ko'rish\n/help - Yordam");

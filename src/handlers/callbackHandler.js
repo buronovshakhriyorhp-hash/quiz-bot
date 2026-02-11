@@ -1,4 +1,5 @@
 
+const { formatMessage, getGroupIcon, logErrorToAdmin } = require('../utils/designUtils');
 const User = require('../models/User');
 const Question = require('../models/Question');
 const sequelize = require('../database/db');
@@ -362,6 +363,11 @@ module.exports = async (bot, callbackQuery) => {
                 user.incorrectAnswers = (user.incorrectAnswers || 0) + 1;
                 const correctOption = questionData.options[questionData.correctOptionIndex];
                 feedbackText = `❌ <b>Noto'g'ri!</b>\nTo'g'ri javob: <b>${correctOption}</b>`;
+
+                if (questionData.explanation) {
+                    feedbackText += `\n\n💡 <b>Izoh:</b>\n${questionData.explanation}`;
+                }
+
                 await bot.answerCallbackQuery(callbackQuery.id, { text: "❌ Noto'g'ri!", show_alert: false });
             }
 
@@ -379,12 +385,15 @@ module.exports = async (bot, callbackQuery) => {
                 return [{ text: text, callback_data: 'noop' }];
             });
 
-            await bot.editMessageText(`❓ <b>KUNLIK SAVOL (Javob berildi):</b>\n${questionData.questionText}\n\n${feedbackText}`, {
-                chat_id: chatId,
-                message_id: msg.message_id,
-                parse_mode: 'HTML',
-                reply_markup: { inline_keyboard: outputOptions }
-            });
+            await bot.editMessageText(
+                formatMessage('❓', 'KUNLIK SAVOL (Javob berildi)', questionData.questionText, feedbackText),
+                {
+                    chat_id: chatId,
+                    message_id: msg.message_id,
+                    parse_mode: 'HTML',
+                    reply_markup: { inline_keyboard: outputOptions }
+                }
+            );
             return;
         }
 
@@ -420,6 +429,12 @@ module.exports = async (bot, callbackQuery) => {
                 user.incorrectAnswers = (user.incorrectAnswers || 0) + 1; // Increment incorrect
                 const correctOption = questionData.options[questionData.correctOptionIndex];
                 feedbackText = `❌ <b>Noto'g'ri!</b>\nTo'g'ri javob: <b>${correctOption}</b>`;
+
+                // AI MENTOR EXPLANATION
+                if (questionData.explanation) {
+                    feedbackText += `\n\n💡 <b>Izoh (Mentor):</b>\n${questionData.explanation}`;
+                }
+
                 await bot.answerCallbackQuery(callbackQuery.id, { text: "❌ Noto'g'ri!", show_alert: false });
             }
 
@@ -461,15 +476,20 @@ module.exports = async (bot, callbackQuery) => {
                 }
             });
 
-            const progressText = `📊 <b>Savol: ${user.currentQuestionIndex + 1}/${Math.min(10, totalQuestions)}</b>`;
-            const fullText = `${progressText}\n\n❓ ${safeQuestionText}\n\n${feedbackText}`;
+            // USE DESIGN UTILS IF NEEDED OR KEEP CUSTOM
+            // Progress Bar Logic (Custom for Quiz Flow)
+            // const progressText = `📊 <b>Savol: ${user.currentQuestionIndex + 1}/${Math.min(10, totalQuestions)}</b>`;
+            // const fullText = `${progressText}\n\n❓ ${safeQuestionText}\n\n${feedbackText}`;
 
-            await bot.editMessageText(fullText, {
-                chat_id: chatId,
-                message_id: msg.message_id,
-                parse_mode: 'HTML',
-                reply_markup: { inline_keyboard: newKeyboard }
-            });
+            await bot.editMessageText(
+                formatMessage('📝', `BO'LIM: ${user.currentSection}`, `❓ <b>${user.currentQuestionIndex + 1}/${Math.min(10, totalQuestions)}</b>\n\n${safeQuestionText}\n\n${feedbackText}`),
+                {
+                    chat_id: chatId,
+                    message_id: msg.message_id,
+                    parse_mode: 'HTML',
+                    reply_markup: { inline_keyboard: newKeyboard }
+                }
+            );
         }
 
         // Handle Next Question

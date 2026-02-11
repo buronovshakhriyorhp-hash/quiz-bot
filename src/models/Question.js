@@ -16,6 +16,10 @@ const Question = sequelize.define('Question', {
         type: DataTypes.TEXT,
         allowNull: false
     },
+    explanation: { // AI Mentor feedback
+        type: DataTypes.TEXT,
+        allowNull: true
+    },
     options: {
         type: DataTypes.JSON, // Stores array of strings
         allowNull: false
