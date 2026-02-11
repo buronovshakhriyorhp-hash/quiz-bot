@@ -28,6 +28,8 @@ async function getCachedSections(topic) {
     return data;
 }
 
+const { getProgressBar } = require('../utils/designUtils');
+
 async function askQuestion(bot, chatId, user, isFirstQuestion = false, messageId = null) {
     if (!user.currentSection) {
         return bot.sendMessage(chatId, "Xatolik: Bo'lim tanlanmagan.");
@@ -47,12 +49,27 @@ async function askQuestion(bot, chatId, user, isFirstQuestion = false, messageId
 
     // Auto-finish after 10 questions or when out of questions
     if (user.currentQuestionIndex >= totalQuestions || user.currentQuestionIndex >= 10) {
-        // Quiz finished
+        // Quiz finished logic (Scorecard)
         const earnedPoints = user.tempScore;
         user.totalScore += earnedPoints;
+        user.cycleScore = (user.cycleScore || 0) + earnedPoints;
         await user.save();
 
-        const resultMsg = `🎉 <b>Tabriklaymiz! Test yakunlandi.</b>\n\n📚 Fan: <b>${user.currentTopic.toUpperCase()}</b>\n📂 Bo'lim: <b>${user.currentSection}</b>\n\n✅ Natija: <b>${user.tempScore}</b> / ${Math.min(10, totalQuestions)} ta to'g'ri\n🏆 Umumiy ballingiz: <b>${user.totalScore}</b>\n\n🔄 Qayta ishlash uchun /start ni bosing.`;
+        // Calculate Rank in Group
+        const rank = await User.count({
+            where: {
+                groupId: user.groupId,
+                cycleScore: { [Op.gt]: user.cycleScore }
+            }
+        }) + 1;
+
+        const resultMsg = `🎉 <b>Tabriklaymiz! Test yakunlandi.</b>\n\n` +
+            `📚 Fan: <b>${user.currentTopic.toUpperCase()}</b>\n` +
+            `📂 Bo'lim: <b>${user.currentSection}</b>\n\n` +
+            `✅ Natija: <b>${user.tempScore}</b> / ${Math.min(10, totalQuestions)} ta to'g'ri\n` +
+            `🏆 Umumiy ballingiz: <b>${user.totalScore}</b>\n` +
+            `📊 Guruhdagi o'rningiz: <b>#${rank}</b>\n\n` +
+            `🔄 Qayta ishlash uchun /start ni bosing.`;
 
         // Either edit or send new if finishing
         if (messageId) {
@@ -63,7 +80,6 @@ async function askQuestion(bot, chatId, user, isFirstQuestion = false, messageId
                     parse_mode: 'HTML'
                 });
             } catch (e) {
-                // if edit fails (e.g. message too old), send new
                 await bot.sendMessage(chatId, resultMsg, { parse_mode: 'HTML' });
             }
         } else {
@@ -75,6 +91,7 @@ async function askQuestion(bot, chatId, user, isFirstQuestion = false, messageId
         user.currentSection = null;
         user.currentQuestionIndex = 0;
         user.tempScore = 0;
+        user.currentQuestionStart = null;
         await user.save();
         return;
     }
@@ -90,7 +107,6 @@ async function askQuestion(bot, chatId, user, isFirstQuestion = false, messageId
     });
 
     if (!questionData) {
-        // Fallback if index mismatch
         await bot.sendMessage(chatId, "Savollar tugadi.");
         return;
     }
@@ -98,9 +114,6 @@ async function askQuestion(bot, chatId, user, isFirstQuestion = false, messageId
     const inlineKeyboard = questionData.options.map((option, index) => {
         return [{ text: option, callback_data: `ans_${index}` }];
     });
-
-    // Add "Back" button if needed, but usually not in quiz flow? 
-    // Maybe "Stop Quiz" button? For now, keep simple.
 
     const opts = {
         reply_markup: {
@@ -118,19 +131,41 @@ async function askQuestion(bot, chatId, user, isFirstQuestion = false, messageId
     };
 
     const safeQuestionText = escapeHTML(questionData.questionText);
-    const progressText = `📊 <b>Savol: ${user.currentQuestionIndex + 1}/${Math.min(10, totalQuestions)}</b>`;
-    const fullText = `${progressText}\n\n❓ ${safeQuestionText}`;
+
+    // UI: Progress Bar [🔵🔵🔵⚪️⚪️]
+    // 10 questions max per session
+    const currentQ = user.currentQuestionIndex;
+    const maxQ = Math.min(10, totalQuestions);
+
+    // Custom dots progress bar
+    const filled = '🔵'.repeat(currentQ);
+    const empty = '⚪️'.repeat(maxQ - currentQ);
+    const progressBar = `[${filled}${empty}]`;
+
+    const difficultyIcon = questionData.difficulty === 'hard' ? '🔴' : (questionData.difficulty === 'medium' ? '🟡' : '🟢');
+    const xpValue = questionData.difficulty === 'hard' ? 3 : (questionData.difficulty === 'medium' ? 2 : 1);
+
+    const header = `⏳ <b>15 SONIYA VAQT!</b>`;
+    const progressText = `${progressBar} <b>${currentQ + 1}/${maxQ}</b>`;
+    const fullText = `${header}\n${progressText}\n\n${difficultyIcon} <b>${xpValue} XP</b>\n❓ ${safeQuestionText}`;
+
+    // Update User Timer
+    user.currentQuestionStart = new Date();
+    await user.save();
 
     if (isFirstQuestion) {
         await bot.sendMessage(chatId, fullText, opts);
     } else if (messageId) {
-        await bot.editMessageText(fullText, {
-            chat_id: chatId,
-            message_id: messageId,
-            ...opts
-        });
+        try {
+            await bot.editMessageText(fullText, {
+                chat_id: chatId,
+                message_id: messageId,
+                ...opts
+            });
+        } catch (e) {
+            await bot.sendMessage(chatId, fullText, opts);
+        }
     } else {
-        // Fallback
         await bot.sendMessage(chatId, fullText, opts);
     }
 }

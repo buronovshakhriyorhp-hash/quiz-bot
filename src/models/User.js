@@ -53,6 +53,10 @@ const User = sequelize.define('User', {
     tempScore: { // Score for the current quiz session
         type: DataTypes.INTEGER,
         defaultValue: 0
+    },
+    currentQuestionStart: { // For timer logic
+        type: DataTypes.DATE,
+        allowNull: true
     }
 });
 
