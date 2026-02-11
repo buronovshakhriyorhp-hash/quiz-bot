@@ -322,13 +322,17 @@ module.exports = async (bot, callbackQuery) => {
 
             if (isCorrect) {
                 user.tempScore += 1;
+                user.correctAnswers = (user.correctAnswers || 0) + 1; // Increment correct
                 feedbackText = "✅ <b>To'g'ri!</b> Tabriklaymiz!";
                 await bot.answerCallbackQuery(callbackQuery.id, { text: "✅ To'g'ri!", show_alert: false });
             } else {
+                user.incorrectAnswers = (user.incorrectAnswers || 0) + 1; // Increment incorrect
                 const correctOption = questionData.options[questionData.correctOptionIndex];
                 feedbackText = `❌ <b>Noto'g'ri!</b>\nTo'g'ri javob: <b>${correctOption}</b>`;
                 await bot.answerCallbackQuery(callbackQuery.id, { text: "❌ Noto'g'ri!", show_alert: false });
             }
+
+            user.lastActiveAt = new Date(); // Update activity
 
             await user.save();
 

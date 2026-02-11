@@ -18,7 +18,19 @@ const User = sequelize.define('User', {
         type: DataTypes.DATE,
         defaultValue: DataTypes.NOW
     },
+    lastActiveAt: {
+        type: DataTypes.DATE,
+        defaultValue: DataTypes.NOW
+    },
     totalScore: {
+        type: DataTypes.INTEGER,
+        defaultValue: 0
+    },
+    correctAnswers: {
+        type: DataTypes.INTEGER,
+        defaultValue: 0
+    },
+    incorrectAnswers: {
         type: DataTypes.INTEGER,
         defaultValue: 0
     },

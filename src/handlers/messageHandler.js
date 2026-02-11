@@ -12,29 +12,27 @@ module.exports = async (bot, msg) => {
     if (!text) return;
 
     try {
-        // Create or Update user (Upsert)
-        // We use upsert to keep firstName and username fresh.
-        // totalScore and joinDate are preserved if record exists (by default upsert updates all unless specified)
-        // But Sequelize upsert updates all fields passed.
-        // To preserve totalScore, we should check if user exists or use a different approach.
-        // Actually, upsert overwrites.
-        // Better approach for "update info but keep score":
-
         let userRecord = await User.findOne({ where: { telegramId: user.id.toString() } });
+
+        // Upsert Logic
         if (!userRecord) {
             userRecord = await User.create({
                 telegramId: user.id.toString(),
                 firstName: user.first_name,
                 username: user.username,
-                // joinDate and totalScore use defaults
+                // joinDate, totalScore, stats use defaults
             });
         } else {
-            // Update info only if changed
+            // Update info
+            let changed = false;
             if (userRecord.firstName !== user.first_name || userRecord.username !== user.username) {
                 userRecord.firstName = user.first_name;
                 userRecord.username = user.username;
-                await userRecord.save();
+                changed = true;
             }
+            // Always update activity
+            userRecord.lastActiveAt = new Date();
+            await userRecord.save();
         }
 
         const isAllowed = await enforceSubscription(bot, chatId, user.id);
@@ -43,15 +41,11 @@ module.exports = async (bot, msg) => {
         if (text === '/start' || text === `/start@${(await bot.getMe()).username}`) {
             // Check if group chat
             if (msg.chat.type === 'group' || msg.chat.type === 'supergroup') {
-                // Check if bot is admin
                 const botMember = await bot.getChatMember(chatId, (await bot.getMe()).id);
                 if (botMember.status !== 'administrator' && botMember.status !== 'creator') {
-                    // silently ignore or send message?
                     await bot.sendMessage(chatId, "Iltimos, ishlashim uchun meni ushbu guruhga ADMIN qiling.");
                     return;
                 }
-
-                // Allow proceeding to show Main Menu in the group
             }
 
             const opts = {
@@ -66,6 +60,35 @@ module.exports = async (bot, msg) => {
                 }
             };
             await bot.sendMessage(chatId, `Assalomu alaykum, ${user.first_name}! IT Quiz botiga xush kelibsiz.\nIltimos, bilimingizni sinash uchun fanlardan birini tanlang:`, opts);
+
+        } else if (text === '/profile') {
+            const u = userRecord;
+            const total = (u.correctAnswers || 0) + (u.incorrectAnswers || 0);
+            const winRate = total > 0 ? Math.round((u.correctAnswers / total) * 100) : 0;
+
+            // Level calculation
+            const level = Math.floor(u.totalScore / 50) + 1;
+            let levelTitle = "Havaskor";
+            if (level > 5 && level <= 10) levelTitle = "Bilimdon";
+            if (level > 10 && level <= 20) levelTitle = "Mutaxassis";
+            if (level > 20) levelTitle = "Ekspert";
+            if (level > 50) levelTitle = "Grandmaster";
+
+            const joinDate = u.joinDate ? new Date(u.joinDate).toLocaleDateString('uz-UZ') : 'Noma\'lum';
+            const lastActive = u.lastActiveAt ? new Date(u.lastActiveAt).toLocaleString('uz-UZ') : 'Hozirgina';
+
+            const profileMsg = `👤 <b>PROFIL: ${u.firstName}</b>\n\n` +
+                `🔰 <b>Daraja:</b> ${levelTitle} (Level ${level})\n` +
+                `✨ <b>XP (Ball):</b> ${u.totalScore}\n\n` +
+                `📊 <b>Statistika:</b>\n` +
+                `✅ To'g'ri: ${u.correctAnswers || 0} ta\n` +
+                `❌ Xato: ${u.incorrectAnswers || 0} ta\n` +
+                `📈 Aniqlik: ${winRate}%\n\n` +
+                `📅 A'zo bo'lgan: ${joinDate}\n` +
+                `🕒 Oxirgi faollik: ${lastActive}`;
+
+            await bot.sendMessage(chatId, profileMsg, { parse_mode: 'HTML' });
+
         } else if (text === '/top') {
             const topUsers = await User.findAll({
                 order: [['totalScore', 'DESC']],
@@ -90,7 +113,7 @@ module.exports = async (bot, msg) => {
                 await bot.sendMessage(chatId, message, { parse_mode: 'HTML' });
             }
         } else if (text === '/help') {
-            await bot.sendMessage(chatId, "Yordam:\n/start - Botni qayta ishga tushirish\n/top - 🏆 Reytingni ko'rish\n/help - Yordam");
+            await bot.sendMessage(chatId, "Yordam:\n/start - Botni qayta ishga tushirish\n/profile - Mening profilim\n/top - 🏆 Reytingni ko'rish\n/help - Yordam");
         }
     } catch (error) {
         console.error('Error in message handler:', error);
