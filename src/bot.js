@@ -8,6 +8,7 @@ const adminHandler = require('./handlers/adminHandler');
 const User = require('./models/User'); // Ensure model is loaded
 const { scheduleDailyChallenge } = require('./services/dailyChallengeService');
 const { scheduleGroupCompetition } = require('./services/groupCompetitionService');
+const { scheduleCommunityBoss, handleBossFight, handleBossAnswer } = require('./services/communityBossService');
 const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -214,6 +215,8 @@ const bot = new TelegramBot(TOKEN, { polling: false });
 scheduleDailyChallenge(bot);
 // Schedule Group Competition
 scheduleGroupCompetition(bot);
+// Schedule Community Boss
+scheduleCommunityBoss(bot);
 
 // Database Connection
 sequelize.sync({ alter: true })

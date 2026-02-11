@@ -57,6 +57,14 @@ const User = sequelize.define('User', {
     currentQuestionStart: { // For timer logic
         type: DataTypes.DATE,
         allowNull: true
+    },
+    nextDifficulty: {
+        type: DataTypes.STRING, // 'easy', 'medium', 'hard'
+        defaultValue: 'medium'
+    },
+    answeredQuestions: {
+        type: DataTypes.JSON, // Array of question IDs [1, 5, 12]
+        defaultValue: []
     }
 });
 

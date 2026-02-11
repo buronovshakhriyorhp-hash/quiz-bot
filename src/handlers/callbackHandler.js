@@ -96,15 +96,39 @@ async function askQuestion(bot, chatId, user, isFirstQuestion = false, messageId
         return;
     }
 
-    // Fetch specific question by offset
-    const questionData = await Question.findOne({
+    // ADAPTIVE FETCHING
+    // 1. Try to find a question of 'nextDifficulty' that hasn't been answered
+    let questionData = await Question.findOne({
         where: {
             topic: user.currentTopic,
-            section: user.currentSection
+            section: user.currentSection,
+            difficulty: user.nextDifficulty,
+            id: { [Op.notIn]: (user.answeredQuestions || []) }
         },
-        offset: user.currentQuestionIndex,
-        limit: 1
+        order: sequelize.random() // Randomize
     });
+
+    // 2. Fallback: If no question of that difficulty, try ANY difficulty
+    if (!questionData) {
+        questionData = await Question.findOne({
+            where: {
+                topic: user.currentTopic,
+                section: user.currentSection,
+                id: { [Op.notIn]: (user.answeredQuestions || []) }
+            },
+            order: sequelize.random()
+        });
+    }
+
+    if (!questionData) {
+        // Fallback: If all questions answered, maybe reset or just say done? 
+        // For now, let's just say "Savollar tugadi" but nicely.
+        // Actually, the check at the top (idx >= total) might have caught this, 
+        // but adaptive logic defies "offset". 
+        // Let's rely on this check.
+        await bot.sendMessage(chatId, "Bu bo'limdagi barcha savollarni yechib bo'ldingiz! 🎉");
+        return;
+    }
 
     if (!questionData) {
         await bot.sendMessage(chatId, "Savollar tugadi.");
@@ -476,16 +500,32 @@ module.exports = async (bot, callbackQuery) => {
                 await bot.answerCallbackQuery(callbackQuery.id, { text: "❌ Noto'g'ri!", show_alert: false });
             }
 
-            user.lastActiveAt = new Date(); // Update activity
+            // ADAPTIVE LOGIC
+            if (isCorrect && !isTimeout) {
+                // Increase difficulty
+                if (user.nextDifficulty === 'easy') user.nextDifficulty = 'medium';
+                else if (user.nextDifficulty === 'medium') user.nextDifficulty = 'hard';
+            } else {
+                // Decrease difficulty
+                if (user.nextDifficulty === 'hard') user.nextDifficulty = 'medium';
+                else if (user.nextDifficulty === 'medium') user.nextDifficulty = 'easy';
+            }
 
+            // Mark question as answered
+            let answered = user.answeredQuestions || [];
+            if (!Array.isArray(answered)) answered = [];
+            answered.push(questionData.id);
+            user.answeredQuestions = answered;
+
+            user.lastActiveAt = new Date(); // Update activity
             await user.save();
 
             // Modify keyboard to show result and freeze
             const newKeyboard = questionData.options.map((option, index) => {
                 let text = option;
                 if (index === answerIndex) {
-                    text = isCorrect ? `✅ ${option}` : `❌ ${option}`;
-                } else if (index === questionData.correctOptionIndex && !isCorrect) {
+                    text = (isCorrect && !isTimeout) ? `✅ ${option}` : `❌ ${option}`;
+                } else if (index === questionData.correctOptionIndex && (!isCorrect || isTimeout)) {
                     // Optionally show correct answer too?
                     text = `✅ ${option}`;
                 }
@@ -493,8 +533,8 @@ module.exports = async (bot, callbackQuery) => {
                 return [{ text: text, callback_data: 'noop' }]; // Disable button
             });
 
-            // Add Next Button
-            newKeyboard.push([{ text: "➡️ Keyingi savol", callback_data: 'next_question' }]);
+            // REMOVED "Next Question" button for Smart Pause
+            // newKeyboard.push([{ text: "➡️ Keyingi savol", callback_data: 'next_question' }]);
 
             const escapeHTML = (str) => {
                 return str.replace(/&/g, "&amp;")
@@ -514,10 +554,8 @@ module.exports = async (bot, callbackQuery) => {
                 }
             });
 
-            // USE DESIGN UTILS IF NEEDED OR KEEP CUSTOM
-            // Progress Bar Logic (Custom for Quiz Flow)
-            // const progressText = `📊 <b>Savol: ${user.currentQuestionIndex + 1}/${Math.min(10, totalQuestions)}</b>`;
-            // const fullText = `${progressText}\n\n❓ ${safeQuestionText}\n\n${feedbackText}`;
+            // Feedback with Countdown
+            feedbackText += `\n\n⏳ <b>3 soniyadan so'ng keyingi savol...</b>`;
 
             await bot.editMessageText(
                 formatMessage('📝', `BO'LIM: ${user.currentSection}`, `❓ <b>${user.currentQuestionIndex + 1}/${Math.min(10, totalQuestions)}</b>\n\n${safeQuestionText}\n\n${feedbackText}`),
@@ -528,9 +566,16 @@ module.exports = async (bot, callbackQuery) => {
                     reply_markup: { inline_keyboard: newKeyboard }
                 }
             );
+
+            // SMART PAUSE
+            setTimeout(async () => {
+                user.currentQuestionIndex += 1;
+                await user.save();
+                await askQuestion(bot, chatId, user, false, msg.message_id);
+            }, 3000); // 3 seconds delay
         }
 
-        // Handle Next Question
+        // Handle Next Question (Legacy)
         if (data === 'next_question') {
             // Move to next question
             user.currentQuestionIndex += 1;
@@ -540,6 +585,23 @@ module.exports = async (bot, callbackQuery) => {
             await askQuestion(bot, chatId, user, false, msg.message_id);
             // Acknowledge callback to stop spinner
             await bot.answerCallbackQuery(callbackQuery.id);
+        }
+
+        if (data.startsWith('boss_fight_')) {
+            const questionId = data.split('_')[2];
+            const { handleBossFight } = require('../services/communityBossService');
+            await handleBossFight(bot, callbackQuery, questionId);
+            await bot.answerCallbackQuery(callbackQuery.id);
+            return;
+        }
+
+        if (data.startsWith('boss_ans_')) {
+            const parts = data.split('_');
+            const questionId = parts[2];
+            const answerIndex = parseInt(parts[3]);
+            const { handleBossAnswer } = require('../services/communityBossService');
+            await handleBossAnswer(bot, callbackQuery, questionId, answerIndex);
+            return;
         }
 
     } catch (e) {
