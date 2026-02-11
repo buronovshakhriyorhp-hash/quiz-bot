@@ -10,8 +10,10 @@ const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+app.use(express.json());
+
 app.get('/', (req, res) => {
-    res.send('Bot is running!');
+    res.send('Bot is running (Webhook Mode)!');
 });
 
 // Self-ping to keep the bot alive
@@ -20,20 +22,27 @@ setInterval(() => {
     https.get('https://quiz-bot-yo95.onrender.com');
 }, 14 * 60 * 1000); // Every 14 minutes
 
-app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+// Webhook Route
+app.post(`/bot${TOKEN}`, (req, res) => {
+    bot.processUpdate(req.body);
+    res.sendStatus(200);
 });
 
-// Initialize Bot
-const bot = new TelegramBot(TOKEN, {
-    polling: {
-        interval: 300, // Check for updates every 300ms
-        autoStart: true,
-        params: {
-            timeout: 10
-        }
+app.listen(PORT, async () => {
+    console.log(`Server is running on port ${PORT}`);
+
+    // Set Webhook
+    const RENDER_URL = 'https://quiz-bot-yo95.onrender.com';
+    try {
+        await bot.setWebHook(`${RENDER_URL}/bot${TOKEN}`);
+        console.log(`Webhook set to: ${RENDER_URL}/bot${TOKEN}`);
+    } catch (error) {
+        console.error('Error setting webhook:', error);
     }
 });
+
+// Initialize Bot (No Polling)
+const bot = new TelegramBot(TOKEN, { polling: false });
 
 // Database Connection
 sequelize.sync({ alter: true })
@@ -47,9 +56,4 @@ bot.on('message', async (msg) => {
 });
 bot.on('callback_query', (query) => callbackHandler(bot, query));
 
-console.log('Bot is running professionally...');
-
-// Error handling
-bot.on('polling_error', (error) => {
-    console.log(error.code);  // => 'EFATAL'
-});
+console.log('Bot is running professionally (Webhook)...');
