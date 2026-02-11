@@ -62,9 +62,25 @@ async function logErrorToAdmin(bot, error, context = '') {
     }
 }
 
+const SUCCESS_MESSAGES = [
+    "Dahshat! 🔥",
+    "Qoyil! ⚡️",
+    "Super! 🚀",
+    "Yorvoribsiz! 🎯",
+    "Barakalla! 🌟",
+    "Al'o natija! 💎",
+    "To'g'ri! Davom eting! ⏩"
+];
+
+function getRandomSuccessMessage() {
+    const randomIndex = Math.floor(Math.random() * SUCCESS_MESSAGES.length);
+    return SUCCESS_MESSAGES[randomIndex];
+}
+
 module.exports = {
     formatMessage,
     getProgressBar,
     getGroupIcon,
-    logErrorToAdmin
+    logErrorToAdmin,
+    getRandomSuccessMessage
 };

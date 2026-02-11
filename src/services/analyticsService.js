@@ -41,4 +41,31 @@ async function getGrowthAnalytics() {
     };
 }
 
-module.exports = { getGrowthAnalytics };
+async function getCourseMVP() {
+    // 1. Get all seasons
+    const seasons = await Season.findAll();
+    const userStats = {}; // { telegramId: { name: 'Ali', totalXP: 100, wins: 2 } }
+
+    // 2. Aggregate from history
+    seasons.forEach(s => {
+        if (s.results) {
+            Object.values(s.results).forEach(groupData => {
+                if (groupData.mvp) {
+                    // We don't have ID in old history structure, just name/score. 
+                    // ideally we should have stored ID. For now, we skip history user aggregation purely by name as it's unreliable.
+                    // Instead, let's rely on User.totalScore which is LIFETIME score.
+                }
+            });
+        }
+    });
+
+    // 3. Real "Course MVP" is simply the best User by totalScore
+    const mvp = await User.findOne({
+        order: [['totalScore', 'DESC']],
+        attributes: ['firstName', 'username', 'totalScore', 'groupId', 'correctAnswers', 'incorrectAnswers']
+    });
+
+    return mvp;
+}
+
+module.exports = { getGrowthAnalytics, getCourseMVP };

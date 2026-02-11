@@ -1,5 +1,5 @@
 
-const { formatMessage, getGroupIcon, logErrorToAdmin } = require('../utils/designUtils');
+const { formatMessage, getGroupIcon, logErrorToAdmin, getRandomSuccessMessage } = require('../utils/designUtils');
 const User = require('../models/User');
 const Question = require('../models/Question');
 const sequelize = require('../database/db');
@@ -357,8 +357,9 @@ module.exports = async (bot, callbackQuery) => {
                 user.cycleScore = (user.cycleScore || 0) + xp; // Add to cycle score
                 user.correctAnswers = (user.correctAnswers || 0) + 1;
 
-                feedbackText = `✅ <b>To'g'ri!</b> Siz <b>${xp} XP</b> oldingiz!`;
-                await bot.answerCallbackQuery(callbackQuery.id, { text: `✅ To'g'ri! +${xp} XP`, show_alert: false });
+                const successMsg = getRandomSuccessMessage();
+                feedbackText = `✅ <b>${successMsg}</b> Siz <b>${xp} XP</b> oldingiz!`;
+                await bot.answerCallbackQuery(callbackQuery.id, { text: `✅ ${successMsg} +${xp} XP`, show_alert: false });
             } else {
                 user.incorrectAnswers = (user.incorrectAnswers || 0) + 1;
                 const correctOption = questionData.options[questionData.correctOptionIndex];
@@ -423,8 +424,10 @@ module.exports = async (bot, callbackQuery) => {
                 user.tempScore += 1;
                 user.cycleScore = (user.cycleScore || 0) + 1; // Add to cycle score
                 user.correctAnswers = (user.correctAnswers || 0) + 1; // Increment correct
-                feedbackText = "✅ <b>To'g'ri!</b> Tabriklaymiz!";
-                await bot.answerCallbackQuery(callbackQuery.id, { text: "✅ To'g'ri!", show_alert: false });
+
+                const successMsg = getRandomSuccessMessage();
+                feedbackText = `✅ <b>${successMsg}</b>`;
+                await bot.answerCallbackQuery(callbackQuery.id, { text: `✅ ${successMsg}`, show_alert: false });
             } else {
                 user.incorrectAnswers = (user.incorrectAnswers || 0) + 1; // Increment incorrect
                 const correctOption = questionData.options[questionData.correctOptionIndex];

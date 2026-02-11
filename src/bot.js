@@ -10,9 +10,23 @@ const { scheduleDailyChallenge } = require('./services/dailyChallengeService');
 const { scheduleGroupCompetition } = require('./services/groupCompetitionService');
 const express = require('express');
 const app = express();
-const PORT = process.env.PORT || 3000;
+const port = process.env.PORT || 3000;
+
+// Rate Limiting
+const rateLimit = require('express-rate-limit');
+const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per windowMs
+    message: 'Too many requests from this IP, please try again later.'
+});
+app.use('/api/', apiLimiter);
 
 app.use(express.json());
+
+// Health Check (for Render)
+app.get('/health', (req, res) => {
+    res.status(200).send('OK');
+});
 
 const Season = require('./models/Season');
 
@@ -135,9 +149,11 @@ app.get('/dashboard', async (req, res) => {
 app.get('/api/analytics', async (req, res) => {
     // Secure this endpoint in production
     try {
-        const { getGrowthAnalytics } = require('./services/analyticsService');
+        const { getGrowthAnalytics, getCourseMVP } = require('./services/analyticsService');
         const data = await getGrowthAnalytics();
-        res.json(data);
+        const mvp = await getCourseMVP();
+
+        res.json({ ...data, courseMVP: mvp });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
