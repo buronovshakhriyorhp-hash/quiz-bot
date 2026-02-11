@@ -226,6 +226,13 @@ sequelize.sync({ alter: true })
 const isRateLimited = require('./middleware/rateLimiter');
 
 // Handlers
+// Rating Command
+bot.onText(/\/rating/, async (msg) => {
+    const { getStandingsText } = require('./services/groupCompetitionService');
+    const text = await getStandingsText();
+    bot.sendMessage(msg.chat.id, text, { parse_mode: 'HTML' });
+});
+
 bot.on('message', async (msg) => {
     const userId = msg.from.id;
     if (isRateLimited(userId)) return;
