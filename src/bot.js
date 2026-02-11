@@ -64,6 +64,9 @@ app.get('/dashboard', async (req, res) => {
             <div class="chart-container">
                 <canvas id="liveChart"></canvas>
             </div>
+            
+            <h3>📈 Growth Rate (vs Last Season)</h3>
+            <div id="growthStats">Loading analytics...</div>
 
             <h3>📜 History (Past Seasons)</h3>
             <table>
@@ -106,12 +109,60 @@ app.get('/dashboard', async (req, res) => {
                     }
                 }
             });
+
+            // Fetch Growth Analytics
+            fetch('/api/analytics')
+                .then(res => res.json())
+                .then(data => {
+                    const growthDiv = document.getElementById('growthStats');
+                    let html = '<ul>';
+                    for (const [group, rate] of Object.entries(data.growthRates)) {
+                        const color = rate >= 0 ? 'green' : 'red';
+                        html += `< li > <b>${group}</b>: <span style="color:${color}">${rate > 0 ? '+' : ''}${rate}%</span></li > `;
+                    }
+                    html += '</ul>';
+                    growthDiv.innerHTML = html;
+                });
         </script>
     </body>
     </html>
     `;
 
     res.send(html);
+});
+
+// Analytics API
+app.get('/api/analytics', async (req, res) => {
+    // Secure this endpoint in production
+    try {
+        const { getGrowthAnalytics } = require('./services/analyticsService');
+        const data = await getGrowthAnalytics();
+        res.json(data);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/leaderboard-image', async (req, res) => {
+    try {
+        const { generateLeaderboardImage } = require('./services/imageService');
+        const User = require('./models/User');
+
+        const groups = ['N8', 'N9', 'N10'];
+        const data = [];
+        for (const group of groups) {
+            const xp = await User.sum('cycleScore', { where: { groupId: group } }) || 0;
+            data.push({ group, xp });
+        }
+        data.sort((a, b) => b.xp - a.xp);
+
+        const buffer = await generateLeaderboardImage(data);
+        res.set('Content-Type', 'image/png');
+        res.send(buffer);
+    } catch (e) {
+        console.error(e);
+        res.status(500).send('Error generating image');
+    }
 });
 
 // Self-ping to keep the bot alive
