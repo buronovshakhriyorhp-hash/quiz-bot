@@ -14,6 +14,12 @@ app.get('/', (req, res) => {
     res.send('Bot is running!');
 });
 
+// Self-ping to keep the bot alive
+const https = require('https');
+setInterval(() => {
+    https.get('https://quiz-bot-yo95.onrender.com');
+}, 14 * 60 * 1000); // Every 14 minutes
+
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
