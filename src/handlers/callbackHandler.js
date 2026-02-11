@@ -1,5 +1,5 @@
 
-const { formatMessage, getGroupIcon, logErrorToAdmin, getRandomSuccessMessage, getProgressBar, escapeHTML } = require('../utils/designUtils');
+const { formatCard, getModernProgressBar, getTheme, escapeHTML, getRandomSuccessMessage, logErrorToAdmin } = require('../utils/designUtils');
 const User = require('../models/User');
 const Question = require('../models/Question');
 const sequelize = require('../database/db');
@@ -186,9 +186,11 @@ async function askQuestion(bot, chatId, user, isFirstQuestion = false, messageId
         return;
     }
 
-    // Generate Buttons with Question ID
+    // Generate Buttons with A) B) C) Labels
+    const labels = ['A', 'B', 'C', 'D', 'E', 'F'];
     const inlineKeyboard = questionData.options.map((option, index) => {
-        return [{ text: option, callback_data: `ans_${questionData.id}_${index}` }];
+        const label = labels[index] || '';
+        return [{ text: `${label}) ${option}`, callback_data: `ans_${questionData.id}_${index}` }];
     });
 
     const opts = {
@@ -200,28 +202,28 @@ async function askQuestion(bot, chatId, user, isFirstQuestion = false, messageId
 
     const safeQuestionText = escapeHTML(questionData.questionText);
 
-    // UI: Progress Bar [🔵🔵🔵⚪️⚪️]
+    // UI: Premium Card Layout
     const currentQ = user.currentQuestionIndex;
     const maxQ = Math.min(10, totalQuestions);
-    const filled = '🔵'.repeat(currentQ);
-    const empty = '⚪️'.repeat(maxQ - currentQ);
-    const progressBar = `[${filled}${empty}]`;
+    // Progress Visual: [▰▰▰▱▱]
+    const progressVisual = getModernProgressBar(currentQ, maxQ, 10);
 
-    const difficultyIcon = questionData.difficulty === 'hard' ? '🔴' : (questionData.difficulty === 'medium' ? '🟡' : '🟢');
-    const xpValue = questionData.difficulty === 'hard' ? 3 : (questionData.difficulty === 'medium' ? 2 : 1);
+    // XP Badge
+    const xpValue = questionData.difficulty === 'hard' ? 30 : (questionData.difficulty === 'medium' ? 20 : 10);
+    const xpBadge = `🟡 +${xpValue} XP`;
+
+    // Content: Bold & Newline
+    const content = `<b>${safeQuestionText}</b>\n`;
 
     // Initial Render
     let timeLeft = 15;
-    const getHeader = (t) => `⏳ <b>${t}s qoldi...</b>`; // Dynamic Header
 
-    // Group Styling
-    let groupBadge = '';
-    if (user.groupId === 'N8') groupBadge = '🌶 <b>N8</b>';
-    if (user.groupId === 'N9') groupBadge = '🌊 <b>N9</b>';
-    if (user.groupId === 'N10') groupBadge = '🍀 <b>N10</b>';
-
-    const progressText = `${progressBar} <b>${currentQ + 1}/${maxQ}</b> ${groupBadge}`;
-    const formatFullText = (t) => `${getHeader(t)}\n${progressText}\n\n${difficultyIcon} <b>${xpValue} XP</b>\n❓ ${safeQuestionText}`;
+    // Dynamic Status Line Builder: "⏳ 15s...   [▰▰▰▱...]"
+    const formatFullText = (t) => {
+        const tStr = t.toString().padStart(2, ' ');
+        const statusLine = `⏳ ${tStr}s...   ${progressVisual}`;
+        return formatCard(user.groupId, statusLine, xpBadge, content);
+    };
 
     // Update User Timer
     user.currentQuestionStart = new Date();
@@ -253,7 +255,6 @@ async function askQuestion(bot, chatId, user, isFirstQuestion = false, messageId
         const msgId = sentMsg.message_id;
 
         // 1. VISUAL COUNTDOWN (Update every 3s to avoid rate limits)
-        // 15s -> 12s -> 9s -> 6s -> 3s -> 0s
         const intervalId = setInterval(async () => {
             timeLeft -= 3;
             if (timeLeft > 0) {
@@ -480,7 +481,6 @@ module.exports = async (bot, callbackQuery) => {
                 user.correctAnswers = (user.correctAnswers || 0) + 1;
 
                 const successMsg = getRandomSuccessMessage();
-                feedbackText = `✅ <b>${successMsg}</b>`;
                 await bot.answerCallbackQuery(callbackQuery.id, { text: `✅ ${successMsg}`, show_alert: false });
             } else {
                 user.incorrectAnswers = (user.incorrectAnswers || 0) + 1;
@@ -493,29 +493,7 @@ module.exports = async (bot, callbackQuery) => {
                     user.mistakes = mistakes;
                 }
 
-                const correctOption = questionData.options[questionData.correctOptionIndex];
-                feedbackText = `❌ <b>Noto'g'ri!</b>\nTo'g'ri javob: <b>${correctOption}</b>`;
                 await bot.answerCallbackQuery(callbackQuery.id, { text: "❌ Noto'g'ri!", show_alert: false });
-            }
-
-            // EDUCATIONAL UX: Mandatory Explanation (If wrong, or generally if exists?)
-            // User asked: "Har bir savoldan keyin explanation qismini majburiy qil."
-            // And: "Foydalanuvchi xato qilsa, unga o'sha xatosini tahlil qilib ber."
-            // So on Error -> MUST SHOW. On Success -> Optional? 
-            // I will show it on ERROR always. And maybe adds a small "Note" on success if it's very informative?
-            // For now, let's stick to "Only on Error" (standard quiz UX) but ensure it IS shown.
-            // Actually, "Har bir savoldan keyin" means "After every question".
-            // So I will append it to feedback text regardless of result, OR just on error.
-            // Analyzing "Foydalanuvchi xato qilsa, unga o'sha xatosini tahlil qilib ber." -> This implies the main use case is error.
-            if (questionData.explanation) {
-                // Always show explanation if available?
-                // Or just on error?
-                // Let's do: If Error -> Show "Mavzu yuzasidan izoh".
-                // "Har bir savoldan keyin... majburiy qil" -> Maybe user wants it always?
-                // I will show it on ERROR strongly.
-                if (!isCorrect) {
-                    feedbackText += `\n\n💡 <b>Tushuntirish:</b>\n${questionData.explanation}`;
-                }
             }
 
             // ADAPTIVE LOGIC
@@ -536,13 +514,18 @@ module.exports = async (bot, callbackQuery) => {
             user.lastActiveAt = new Date();
             await user.save();
 
-            // Modify keyboard to show result and freeze
+            // Modify keyboard (Show ✅/❌ and Button Labels A/B/C)
+            const labels = ['A', 'B', 'C', 'D', 'E', 'F'];
             const newKeyboard = questionData.options.map((option, index) => {
-                let text = option;
+                const label = labels[index] || '';
+                let text = `${label}) ${option}`;
+
                 if (index === answerIndex) {
-                    text = isCorrect ? `✅ ${option}` : `❌ ${option}`;
+                    text = isCorrect ? `✅ ${text}` : `❌ ${text}`;
                 } else if (index === questionData.correctOptionIndex && !isCorrect) {
-                    text = `✅ ${option}`;
+                    text = `✅ ${label}) ${option}`;
+                } else {
+                    text = `⚪️ ${text}`;
                 }
                 return [{ text: text, callback_data: 'noop' }];
             });
@@ -560,11 +543,31 @@ module.exports = async (bot, callbackQuery) => {
 
             const safeQuestionText = escapeHTML(questionData.questionText);
 
-            // Feedback with Countdown
-            feedbackText += `\n\n⏳ <b>Keyingi savol...</b>`;
+            // Reconstruct Status Line (Finish State)
+            const currentQ = user.currentQuestionIndex + 1;
+            const progressVisual = getModernProgressBar(currentQ, Math.min(10, totalQuestions), 10);
+            const statusLine = `🏁 Yakunlandi       ${progressVisual}`;
+
+            const xpValue = questionData.difficulty === 'hard' ? 30 : (questionData.difficulty === 'medium' ? 20 : 10);
+            const xpBadge = isCorrect ? `🟡 +${xpValue} XP` : `🟡 0 XP (Xato)`;
+
+            const content = `<b>${safeQuestionText}</b>\n`;
+
+            // Build Footer (Explanation)
+            // USER REQUEST: Always show explanation or error logic? 
+            let footer = "";
+            if (isCorrect) {
+                footer = `✅ <b>${getRandomSuccessMessage()}</b>`;
+            } else {
+                footer = `❌ <b>Xato javob.</b>\n\n💡 <b>Tushuntirish:</b>\n${questionData.explanation || "Izoh mavjud emas."}`;
+            }
+
+            footer += `\n\n⏳ <b>Keyingi savol...</b>`;
+
+            const fullText = formatCard(user.groupId, statusLine, xpBadge, content, footer);
 
             await bot.editMessageText(
-                formatMessage('📝', `BO'LIM: ${user.currentSection}`, `❓ <b>${user.currentQuestionIndex + 1}/${Math.min(10, totalQuestions)}</b>\n\n${safeQuestionText}\n\n${feedbackText}`),
+                fullText,
                 {
                     chat_id: chatId,
                     message_id: msg.message_id,

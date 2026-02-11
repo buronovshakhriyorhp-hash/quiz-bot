@@ -12,38 +12,37 @@ function getTheme(groupId) {
 }
 
 /**
- * Generates a Premium Card Layout
- * @param {string} groupId - User's group ID for branding
- * @param {string} status - Top status line (e.g., "📊 3/10 | ⏳ 15s")
- * @param {string} xpBadge - XP indicator (e.g., "🟡 +10 XP")
- * @param {string} content - Main question content
- * @param {string} footer - Explanation or bottom text
+ * Generates the specific Premium Card Layout request
+ * Structure:
+ * ╭─── 💎 N8 GURUHI ───╮
+ * ⏳ 15s...   [▰▰▰▱...] (in code block)
+ * 
+ * <b>Question Text</b>
+ * 
+ * 🟡 +10 XP
  */
 function formatCard(groupId, status, xpBadge, content, footer = '') {
     const theme = getTheme(groupId);
 
-    // Header Construction
-    // Using a cleaner, modern look:
-    // ╭─── 💎 N8 GURUHI ───╮
+    // 1. Header
     let msg = `╭─── <b>${theme.header}</b> ───╮\n`;
 
-    // Status Row
-    msg += `│ ${status}\n`;
+    // 2. Status Bar (Code Block)
+    // Ensure it's in a code block for the "terminal" look
+    msg += `<code>${status}</code>\n\n`;
 
-    // XP Row (Optional, maybe combine with status? Let's keep it separate for visibility as requested)
-    if (xpBadge) {
-        msg += `│ ${xpBadge}\n`;
-    }
-
-    msg += `╰─────────────────────╯\n\n`; // End of header block
-
-    // Main Content
+    // 3. Question (BOLD) + Newline
+    // Content is already passed. ensure it has newline before.
     msg += `${content}\n`;
 
-    // Footer / Explanation
+    // 4. XP (Bottom Line)
+    if (xpBadge) {
+        msg += `\n${xpBadge}`;
+    }
+
+    // 5. Footer (Explanation)
     if (footer) {
-        msg += `\n─────────────────────\n`;
-        msg += `${footer}`;
+        msg += `\n\n${footer}`;
     }
 
     return msg;
@@ -105,5 +104,5 @@ module.exports = {
     getRandomSuccessMessage,
     escapeHTML,
     logErrorToAdmin,
-    formatMessage: formatCard // Alias for backward compatibility if needed, though signatures differ
+    formatMessage: formatCard // Alias
 };
